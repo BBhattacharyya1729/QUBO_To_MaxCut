@@ -490,7 +490,7 @@ def plot_depth0(l,comparison_data,best_angle_data,ws_data,rotation_options=None,
 
 
 '''''''''''''''''''''''''''''''''FINALIZED PLOTS'''''''''''''''''''''''''''''''''''''''''
-def get_depth_cost_comp(prob,idx_dict,DATA,M_list,ws_list=[None, 'GW2','GW3'],path=None):
+def get_depth_cost_comp(prob,idx_dict,DATA,M_list,ws_list=[None, 'GW2','GW3'],path=None,p_max=5):
     fig = plt.figure(figsize=(10,10))
     for ws in ws_list:
         if(ws is None):
@@ -514,7 +514,7 @@ def get_depth_cost_comp(prob,idx_dict,DATA,M_list,ws_list=[None, 'GW2','GW3'],pa
         plt.savefig(path+".pdf",dpi=300)
     plt.show()
 
-def get_depth_prob_comp(prob,idx_dict,DATA,M_list,ws_list=[None, 'GW2','GW3'],path=None):
+def get_depth_prob_comp(prob,idx_dict,DATA,M_list,ws_list=[None, 'GW2','GW3'],path=None,p_max=5):
     fig = plt.figure(figsize=(10,10))
     for ws in ws_list:
         if(ws is None):
