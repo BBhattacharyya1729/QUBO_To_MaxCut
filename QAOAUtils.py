@@ -615,7 +615,7 @@ def prob_boxplot(prob, p_data,path=None):
     gs = GridSpec(3, 8, wspace=2, hspace=0.2)
     order = [[0, slice(0, 4)], [0, slice(4, 8)], [1, slice(0, 4)], [1, slice(4, 8)]]
     
-    plt.suptitle(prob + ' Cost Scatter', y=0.92)
+    plt.suptitle(prob + ' Prob Boxplot', y=0.92)
     for i, w in enumerate(ws_list):
         ax = fig.add_subplot(gs[order[i][0], order[i][1]])
         ax.boxplot([comparison_data[w][0]['probs'],comparison_data[w][None]['probs'],comparison_data[w][-1]['probs']],0,'',label=[w+' 0',w,w+' -1'])
