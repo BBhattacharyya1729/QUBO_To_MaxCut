@@ -18,7 +18,7 @@ Code for QUBO -> Ising Paper
 
 ### Data Generation
 All probems have 2 files for data generation
-
+Discrete/Continous Random QUBO share a file and TSP/MIS share a file
 * **Depth0.ipynb**: Samples 1000 Random instances and compares all warmstarts (GW3,GW2,BM3,BM2) with all vertex-on-top rotations
 
 * **FullRun.ipynb**: Samples 10 instances from those generated in the depth0 files and compares "good" warmstarts (GW3,GW2) with rotations on first, last, and no qubits over depth 0-5.
