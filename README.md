@@ -25,7 +25,7 @@ Discrete/Continous Random QUBO share a file and TSP/MIS share a file
 
 * **PSC:** *TODO*, Samples 10 instances from those generated in the depth0 files and compares PSC warmstarts over depth 0-5.
 
-All data is stored via pickle on [google drive](https://drive.google.com/drive/folders/1TCz_ncc0QwwceBb3bvijLQMW0Dol0Nef?usp=sharing) 
+All data is stored via pickle on [google drive](https://drive.google.com/drive/folders/1TCz_ncc0QwwceBb3bvijLQMW0Dol0Nef?usp=sharing)
 
 ### Figures
 All probems have 7 figures (as of now)
