@@ -1,43 +1,12 @@
-from qiskit.quantum_info import SparsePauliOp,Statevector
-from qiskit import QuantumCircuit
-from qiskit.circuit import ParameterVector,Parameter
-from qiskit.circuit.library import PauliEvolutionGate
+from qiskit.quantum_info import SparsePauliOp
 from WarmStartUtils import *
 import numpy as np
 from functools import reduce
-from qiskit.circuit import Gate
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 from tqdm import tqdm
 from tqdm.contrib import itertools
 from tqdm.notebook import tqdm
-
-class SU2(Gate):
-    def __init__(self, x,y,z,t, label='SU(2)'):
-        super().__init__('U', 1, [t], label=label)
-        self.x = x
-        self.y = y
-        self.z= z 
-    def _define(self):
-        qc = QuantumCircuit(2)
-        qc.unitary(self.to_matrix(), [0])
-        
-        self.definition = qc
-        
-    def to_matrix(self):
-        t = float(self.params[0])
-        
-        return np.array([[np.cos(t)-1j * np.sin(t)*self.z, -np.sin(t) * (self.y+1j * self.x)],[ -np.sin(t) * (-self.y+1j * self.x),np.cos(t)+1j * np.sin(t)*self.z]])
-
-"""
-Indexed Pauli Ops
-"""
-def indexedZ(i,n):
-    return SparsePauliOp("I" * (n-i-1) + "Z" + "I" * i)
-def indexedX(i,n):
-    return SparsePauliOp("I" * (n-i-1) + "X" + "I" * i)
-def indexedY(i,n):
-    return SparsePauliOp("I" * (n-i-1) + "Y" + "I" * i)
 
 """
 Hamiltonian from adjacency matrix A
@@ -49,132 +18,6 @@ def getHamiltonian(A):
         for j in range(n):
             H -= 1/4 * A[i][j] * indexedZ(i,n) @ indexedZ(j,n)
     return H.simplify()
-
-"""
-Default mixer
-"""
-def default_mixer(n):
-    qc = QuantumCircuit(n)
-    t = Parameter('t')
-    qc.rx(2*t,range(n))
-    return qc
-
-"""
-PSC????
-"""
-def PSC_qc(z,theta):
-    n = len(z)
-    qc_init=QuantumCircuit(n)
-    thetas = {-1:theta,1:np.pi-theta}
-    for i,v in enumerate(z):
-        qc_init.ry(thetas[v],i)
-
-    p = Parameter('t')
-    qc_mixer = QuantumCircuit(n)
-    for i,v in enumerate(z):
-         qc_mixer.append( SU2( np.sin(thetas[v]),0, np.cos(thetas[v]),p),[i])    
-    return qc_init,qc_mixer
-
-
-def Q2_qc(theta_list,rotation=None):
-    angles = vertex_on_top(theta_list,rotation)
-    n = len(angles)
-    qc_init=QuantumCircuit(n)
-    for i,v in enumerate(angles):
-        qc_init.ry(v,i)
-        qc_init.p(-np.pi/2,i)
-
-    p = Parameter('t')
-    qc_mixer = QuantumCircuit(n)
-    for i,v in enumerate(angles):
-        qc_mixer.append( SU2(0,-np.sin(v),np.cos(v),p),[i]) 
-        
-    return qc_init,qc_mixer
-
-
-def Q3_qc(theta_list,rotation=None,z_rot=None):
-    angles = vertex_on_top(theta_list,rotation,z_rot=z_rot)
-    n = len(angles)
-    
-    qc_init=QuantumCircuit(n)
-    for i,v in enumerate(angles):
-        qc_init.ry(v[0],i)
-        qc_init.p(v[1],i)
-
-    p = Parameter('t')
-    qc_mixer = QuantumCircuit(n)
-    for i,v in enumerate(angles):
-        theta = v[0]
-        phi = v[1]
-        qc_mixer.append(SU2(np.sin(theta)*np.cos(phi),np.sin(theta)*np.sin(phi),np.cos(theta),p),[i])
-    
-    return qc_init,qc_mixer
-
-
-def QAOA_Ansatz(cost,mixer=None,p=1,initial=None):
-    n=cost.num_qubits
-    qc=QuantumCircuit(n)
-    if(mixer is None):
-       qaoa_mixer =  default_mixer(n)
-    else:
-        qaoa_mixer = mixer
-    if(initial is None):
-        qc.h(range(n))
-    else:
-        qc = initial.copy()
-    Gamma = ParameterVector('γ',p)
-    Beta = ParameterVector('β',p)
-    for i in range(p):
-        if(cost is not None):
-            qc.append(PauliEvolutionGate(cost,Gamma[i]),range(n))
-        qc.append(qaoa_mixer.assign_parameters([Beta[i]]),range(n))
-    return qc
-
-
-def single_circuit_optimization(ansatz,H,opt):
-    history = {"cost": [], "params": []}
-    def compute_expectation(x):
-        psi = Statevector(ansatz.assign_parameters(x))
-        l = psi.expectation_value(H).real
-        history["cost"].append(l)
-        history["params"].append(x)
-        return -l
-    res = opt.minimize(fun= compute_expectation, x0 = 2*np.pi*np.random.random(ansatz.num_parameters))
-    return -res.fun,res.x,history
-
-def circuit_optimization(ansatz,H,opt,reps=10,name=None,verbose=False):
-    if(verbose):
-        if(name is None):
-            print(f"------------Beginning Optimization------------")
-        else:
-            print(f"------------Beginning Optimization: {name}------------")
-
-    history_list = []
-    param_list = []
-    cost_list = []
-    for i in range(reps):
-        cost,params,history = single_circuit_optimization(ansatz,H,opt)
-        history_list.append(history)
-        param_list.append(params)
-        cost_list.append(cost)
-        if(verbose):
-            print(f"Iteration {i} complete")
-    return np.array(cost_list),np.array(param_list),history_list
-
-def optimal_sampling_prob(ansatz,params,H,z):
-    n = len(z)
-    index = np.sum(np.array([2**(i-1) * (v+1) for i,v in enumerate(z)],dtype=int))
-    s1 = np.zeros(2**n)
-    s2 = np.zeros(2**n)
-    
-    s1[index] = 1
-    s2[2**n-1-index]=1
-    
-    s1 = Statevector(s1)
-    s2 = Statevector(s2)
-
-    psi = Statevector(ansatz.assign_parameters(params))
-    return abs((psi.inner(s1)))**2 + abs((psi.inner(s2)))**2
 
 """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 
@@ -250,22 +93,8 @@ def PSC_data(z,theta):
     mixer_ops = lambda t: [ SU2_op(np.sin(thetas[v]),0, np.cos(thetas[v]), t ) for v in z]
     return init,mixer_ops
 
-"""
-Bruteforce maxcut for adj. matrix A by mapping to pm QUBO FAST
-"""
-# def brute_force_maxcut(A,precomp=None):
-#     if(precomp is None):
-#         l=pre_compute(A)
-#     else:
-#         l=precomp
-#     b_list = np.argwhere(precomp == np.amax(precomp))
-#     b_list = np.reshape(b_list,(len(b_list),))
-#     b_list = [bin(b)[2:] for b in  b_list]
-#     return [2*np.array([int(i) for i in '0'*(len(A)-len(b))+b])-1 for b in b_list],np.max(precomp)
-     
 
-
-def single_circuit_optimization_eff(precomp,A,opt,mixer_ops,init,p,param_guess=None):
+def single_circuit_optimization_eff(precomp,opt,mixer_ops,init,p,param_guess=None):
 
     history = {"cost": [], "params": []} if param_guess is None else {"cost": [expval(precomp,QAOA_eval(precomp,param_guess,mixer_ops=mixer_ops,init=init))], "params": [param_guess]}
     def compute_expectation(x):
@@ -280,7 +109,7 @@ def single_circuit_optimization_eff(precomp,A,opt,mixer_ops,init,p,param_guess=N
     res = opt.minimize(fun= compute_expectation, x0=init_param)#x0 = np.zeros(2*p))#
     return np.max(history["cost"]),history["params"][np.argmax(history["cost"])],history
 
-def circuit_optimization_eff(precomp,A,opt,mixer_ops,init,p,reps=10,name=None,verbose=False,param_guesses=None):
+def circuit_optimization_eff(precomp,opt,mixer_ops,init,p,reps=10,name=None,verbose=False,param_guesses=None):
     if(verbose):
         if(name is None):
             print(f"------------Beginning Optimization------------")
@@ -295,7 +124,7 @@ def circuit_optimization_eff(precomp,A,opt,mixer_ops,init,p,reps=10,name=None,ve
     param_list = []
     cost_list = []
     for i in range(reps):
-        cost,params,history = single_circuit_optimization_eff(precomp,A,opt,mixer_ops,init,p,param_guess=init_params[i])
+        cost,params,history = single_circuit_optimization_eff(precomp,opt,mixer_ops,init,p,param_guess=init_params[i])
         history_list.append(history)
         param_list.append(params)
         cost_list.append(cost)
@@ -359,7 +188,7 @@ def warmstart_comp(A,opt,p_max,rotation_options=[None,0,-1],BM_kwargs={"iters":1
         for ws in ws_list:
             if(ws is None):
                 guess  = [opt_params[ws]] + [None] * (reps-1)
-                l=circuit_optimization_eff(precomp,A,opt,None,None,p,reps=reps,param_guesses=guess,**optimizer_kwargs)
+                l=circuit_optimization_eff(precomp,opt,None,None,p,reps=reps,param_guesses=guess,**optimizer_kwargs)
                 opt_data[p][ws]['cost']=l[0]
                 opt_data[p][ws]['params']=l[1]
                 opt_data[p][ws]['probs']=np.array([opt_sampling_prob(v,precomp,param,mixer_ops=None,init=None) for param in l[1]])
@@ -370,7 +199,7 @@ def warmstart_comp(A,opt,p_max,rotation_options=[None,0,-1],BM_kwargs={"iters":1
             else:
                 for r in rotation_options:
                     guess=[opt_params[ws][r]]+ [None] * (reps-1)
-                    l=circuit_optimization_eff(precomp,A,opt,qc_data[ws][r][1],qc_data[ws][r][0],p,reps=reps,param_guesses=guess,**optimizer_kwargs)
+                    l=circuit_optimization_eff(precomp,opt,qc_data[ws][r][1],qc_data[ws][r][0],p,reps=reps,param_guesses=guess,**optimizer_kwargs)
                     opt_data[p][ws][r]['cost']=l[0]
                     opt_data[p][ws][r]['params']=l[1]
                     opt_data[p][ws][r]['probs']=np.array([opt_sampling_prob(v,precomp,param,qc_data[ws][r][1],qc_data[ws][r][0]) for param in l[1]])
@@ -394,7 +223,6 @@ def opt_sampling_prob(v,precomp,params,mixer_ops=None,init=None):
     return np.sum(abs(psi[[np.sum([2**i * v for i,v in enumerate(l[::-1])]) for l in ((v+1)//2)]])**2)
 
 ###Depth 0 Test
-
 def depth0_ws_comp(n,A_func,ws_list = ['BM2','BM3','GW2','GW3'],rotation_options = None,count=1000):
     if(rotation_options is None):
         rotation_options = list(range(n))+[None]
@@ -444,100 +272,139 @@ def depth0_ws_comp(n,A_func,ws_list = ['BM2','BM3','GW2','GW3'],rotation_options
             comparison_data[None]['probs'].append(opt_sampling_prob(v,precomp,[]))
     return comparison_data,best_angle_data,ws_data,A_list
 
-###Initial Plot to Gauge Data
-def plot_depth0(l,comparison_data,best_angle_data,ws_data,rotation_options=None,ws_list =['BM2','BM3','GW2','GW3']):
-    if(rotation_options is None):
-        rotation_options = list(range(n))+[None]
-    x=np.array([d[6] for d in ws_data])
-    fig,ax = plt.subplots(len(ws_list),1,figsize=(5,7))
-    plt.suptitle(l)
-    for i,ws in enumerate(ws_list):
-        ax[i].hist(reduce(lambda x,y:x+y,best_angle_data[ws]['max_cost']),bins=range(len(rotation_options)+1))
-        ax[i].set_title(ws+' max cost data')
-        ax[i].set_ylabel('count')
-        ax[i].get_xaxis().set_ticks([])
-    plt.show()
-    
-    fig,ax = plt.subplots(len(ws_list),1,figsize=(5,7))
-    plt.suptitle(l)
-    for i,ws in enumerate(ws_list):
-        ax[i].hist(reduce(lambda x,y:x+y,best_angle_data[ws]['max_probs']),bins=range(len(rotation_options)+1))
-        ax[i].set_title(ws+' max prob data')
-        ax[i].set_ylabel('count')
-        ax[i].get_xaxis().set_ticks([])
-    plt.show()
-    
-    fig,ax = plt.subplots(len(ws_list)+1,1,figsize=(5,20))
-    for i,w in enumerate(ws_list):
-        ax[i].scatter(x,comparison_data[w][0]['cost'],label=w+' 0',alpha = 0.25)
-        ax[i].scatter(x,comparison_data[w][None]['cost'],label=w,alpha = 0.25)
-        ax[i].scatter(x,comparison_data[w][-1]['cost'],label=w+' -1',alpha = 0.25)
-        ax[i].legend()
-        
-    for ws in ws_list:
-        ax[len(ws_list)].scatter(x,comparison_data[ws][-1]['cost'],label=ws,alpha = 0.25)
-    ax[len(ws_list)].legend()
-    plt.show()
-    
-    fig,ax = plt.subplots(len(ws_list)+1,1,figsize=(5,20))
-    for i,w in enumerate(ws_list):
-        ax[i].boxplot([comparison_data[w][0]['probs'],comparison_data[w][None]['probs'],comparison_data[w][-1]['probs']],0,'',label=[w+' 0',w,w+' -1'])
-        ax[i].legend()
-    
-    ax[len(ws_list)].boxplot([comparison_data[w][-1]['probs'] for w in ws_list],0,'',label=ws_list)
-    ax[len(ws_list)].legend()
-    plt.show()
 
 
 '''''''''''''''''''''''''''''''''FINALIZED PLOTS'''''''''''''''''''''''''''''''''''''''''
-def get_depth_cost_comp(prob,idx_dict,DATA,M_list,ws_list=[None, 'GW2','GW3'],path=None,p_max=5):
-    fig = plt.figure(figsize=(10,10))
-    for ws in ws_list:
-        if(ws is None):
-            mean_data = np.zeros(p_max+1)
-            for idx in range(*idx_dict[prob]):
-                M = M_list[idx]
-                mean_data+=np.array([abs(np.max(l)-M)/M for l in [DATA[idx][p][ws]['cost'] for p in range(0,1+p_max)]])
-            plt.plot(range(0,p_max+1),np.log10(mean_data/(idx_dict[prob][1]-idx_dict[prob][0])),label=str(ws)+" ")
-        else:
-            for r in [0,-1,None]:
-                mean_data = np.zeros(p_max+1)
+def get_depth_cost_comp(prob, idx_dict, PSC_DATA, DATA, M_list, A_list, path=None, p_max=5, std=.25):
+    fig, axs = plt.subplots(1, 2, figsize=(20, 10), sharey=True)
+
+    
+    plt.gca().set_yscale("log")
+    def plot_graph(ws_list, ax, title_suffix):
+        ax.tick_params(axis='y', which='both', length=5, width=1)
+        for ws in ws_list:
+            if ws is None:
+                data = []
                 for idx in range(*idx_dict[prob]):
                     M = M_list[idx]
-                    mean_data+=np.array([abs(np.max(l)-M)/M for l in [DATA[idx][p][ws][r]['cost'] for p in range(0,1+p_max)]])
-                plt.plot(range(0,p_max+1),np.log10(mean_data/(idx_dict[prob][1]-idx_dict[prob][0])),label=str(ws)+" "+str(r))
-    plt.title(prob)
-    plt.xlabel('p')
-    plt.ylabel('Log Relative Error')
-    plt.legend()
-    if(path is not None):
-        plt.savefig(path+".pdf",dpi=300)
+                    A = A_list[idx]
+                    data.append([abs(np.max(l) + np.sum(-A[:-1, :-1]) / 4) / (M + np.sum(-A[:-1, :-1]) / 4) 
+                                 for l in [DATA[idx][p][ws]['cost'] for p in range(0, 1 + p_max)]])
+                mean_data = np.mean(data, axis=0)
+                std_dev_data = np.std(data, axis=0)
+                ax.plot(range(0, p_max + 1), (mean_data), marker='o', linestyle='--', label=str(ws) + " ")
+                ax.fill_between(range(0, p_max + 1), 
+                                (mean_data - std * std_dev_data), 
+                                (mean_data + std * std_dev_data), 
+                                alpha=0.2)
+            else:
+                for r in [0, -1, None]:
+                    data = []
+                    for idx in range(*idx_dict[prob]):
+                        M = M_list[idx]
+                        A = A_list[idx]
+                        data.append([abs(np.max(l) + np.sum(-A[:-1, :-1]) / 4) / (M + np.sum(-A[:-1, :-1]) / 4) 
+                                     for l in [DATA[idx][p][ws][r]['cost'] for p in range(0, 1 + p_max)]])
+                    mean_data = np.mean(data, axis=0)
+                    std_dev_data = np.std(data, axis=0)
+                    ax.plot(range(0, p_max + 1), (mean_data), marker='o', label=str(ws) + " " + str(r))
+                    ax.fill_between(range(0, p_max + 1), 
+                                    (mean_data - std * std_dev_data), 
+                                    (mean_data + std * std_dev_data), 
+                                    alpha=0.2)
+        
+        data = []
+        for idx in range(*idx_dict[prob]):
+            M = M_list[idx]
+            A = A_list[idx]
+            data.append([abs(np.max(l)) / (M + np.sum(-A[:-1, :-1]) / 4) 
+                         for l in [PSC_DATA[idx][p]['cost'] for p in range(0, 1 + p_max)]])
+        mean_data = np.mean(data, axis=0)
+        std_dev_data = np.std(data, axis=0)
+        ax.plot(range(0, p_max + 1), (mean_data), marker='o', label='PSC')
+        ax.fill_between(range(0, p_max + 1), 
+                        (mean_data - std * std_dev_data), 
+                        (mean_data + std * std_dev_data), 
+                        alpha=0.2)
+        
+        ax.set_title(title_suffix, fontsize = 15)
+        ax.set_xlabel('p', fontsize = 12)
+        ax.set_ylabel('Approximation Ratio', fontsize = 12)
+        ax.legend()
+
+    plot_graph([None, 'GW2'], axs[0], "GW2")
+    
+    plot_graph([None, 'GW3'], axs[1], "GW3")
+
+    if path is not None:
+        plt.savefig(path + "_subplots.pdf", dpi=300)
     plt.show()
 
-def get_depth_prob_comp(prob,idx_dict,DATA,M_list,ws_list=[None, 'GW2','GW3'],path=None,p_max=5):
-    fig = plt.figure(figsize=(10,10))
-    for ws in ws_list:
-        if(ws is None):
-            mean_data = np.zeros(p_max+1)
-            for idx in range(*idx_dict[prob]):
-                M = M_list[idx]
-                mean_data+=np.array([abs(np.max(l)) for l in [DATA[idx][p][ws]['probs'] for p in range(0,1+p_max)]])
-            plt.plot(range(0,p_max+1),np.log10(1-mean_data/(idx_dict[prob][1]-idx_dict[prob][0])),label=str(ws)+" ")
-        else:
-            for r in [0,-1,None]:
-                mean_data = np.zeros(p_max+1)
+
+def get_depth_prob_comp(prob, idx_dict, PSC_DATA, DATA, M_list, A_list, path=None, p_max=5, std=.25):
+    fig, axs = plt.subplots(1, 2, figsize=(20, 10), sharey=True)
+
+    plt.gca().set_yscale("log")
+    def plot_graph(ws_list, ax, title_suffix):
+        ax.tick_params(axis='y', which='both', length=5, width=1)
+        ax.minorticks_off()
+        for ws in ws_list:
+            if ws is None:
+                data = []
                 for idx in range(*idx_dict[prob]):
                     M = M_list[idx]
-                    mean_data+=np.array([abs(np.max(l)) for l in [DATA[idx][p][ws][r]['probs'] for p in range(0,1+p_max)]])
-                plt.plot(range(0,p_max+1),np.log10(1-mean_data/(idx_dict[prob][1]-idx_dict[prob][0])),label=str(ws)+" "+str(r))
-    plt.title(prob)
-    plt.xlabel('p (Depth)')
-    plt.ylabel('Probabilty')
-    plt.legend()
-    if(path is not None):
-        plt.savefig(path+".pdf",dpi=300)
-    plt.show()
+                    A = A_list[idx]
+                    data.append([abs(np.max(l))
+                                 for l in [DATA[idx][p][ws]['probs'] for p in range(0, 1 + p_max)]])
+                mean_data = np.mean(data, axis=0)
+                std_dev_data = np.std(data, axis=0)
+                ax.plot(range(0, p_max + 1), (mean_data), marker='o', linestyle='--', label=str(ws) + " ")
+                ax.fill_between(range(0, p_max + 1), 
+                                (mean_data - std * std_dev_data), 
+                                (mean_data + std * std_dev_data), 
+                                alpha=0.2)
+            else:
+                for r in [0, -1, None]:
+                    data = []
+                    for idx in range(*idx_dict[prob]):
+                        M = M_list[idx]
+                        A = A_list[idx]
+                        data.append([abs(np.max(l))
+                                     for l in [DATA[idx][p][ws][r]['probs'] for p in range(0, 1 + p_max)]])
+                    mean_data = np.mean(data, axis=0)
+                    std_dev_data = np.std(data, axis=0)
+                    ax.plot(range(0, p_max + 1), (mean_data), marker='o', label=str(ws) + " " + str(r))
+                    ax.fill_between(range(0, p_max + 1), 
+                                    (mean_data - std * std_dev_data), 
+                                    (mean_data + std * std_dev_data), 
+                                    alpha=0.2)
+        
+        data = []
+        for idx in range(*idx_dict[prob]):
+            M = M_list[idx]
+            A = A_list[idx]
+            data.append([abs(np.max(l))  
+                         for l in [PSC_DATA[idx][p]['probs'] for p in range(0, 1 + p_max)]])
+        mean_data = np.mean(data, axis=0)
+        std_dev_data = np.std(data, axis=0)
+        ax.plot(range(0, p_max + 1), (mean_data), marker='o', label='PSC')
+        ax.fill_between(range(0, p_max + 1), 
+                        (mean_data - std * std_dev_data), 
+                        (mean_data + std * std_dev_data), 
+                        alpha=0.2)
+        
+        ax.set_title(title_suffix, fontsize=15)
+        ax.set_xlabel('p', fontsize=12)
+        ax.set_ylabel('Probability', fontsize=12)
+        ax.legend()
 
+    plot_graph([None, 'GW2'], axs[0], "GW2")
+    
+    plot_graph([None, 'GW3'], axs[1], "GW3")
+
+    if path is not None:
+        plt.savefig(path + "_subplots.pdf", dpi = 300)
+    plt.show()
 
 def max_cost_hist(prob,p_data,path=None):
     ws_list = ['BM2','BM3','GW2','GW3']
