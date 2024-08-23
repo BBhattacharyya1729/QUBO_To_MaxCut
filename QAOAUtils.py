@@ -11,6 +11,9 @@ from tqdm.notebook import tqdm
 """
 Hamiltonian from adjacency matrix A
 """
+def indexedZ(i,n):
+    return SparsePauliOp("I" * (n-i-1) + "Z" + "I" * i)
+
 def getHamiltonian(A):
     n = len(A)
     H = 0 * SparsePauliOp("I" * n)
