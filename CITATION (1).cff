@@ -1,0 +1,19 @@
+# This CITATION.cff file was generated with cffinit.
+# Visit https://bit.ly/cffinit to generate yours today!
+
+cff-version: 1.2.0
+title: QUBO to MaxCut
+message: >-
+  If you use this software, please cite it using the
+  metadata from this file.
+type: software
+authors:
+  - given-names: Bikrant
+    family-names: Bhattacharya
+    email: bbhattac@caltech.edu
+    affiliation: California Institute of Technology
+  - given-names: Michael
+    family-names: Capriotti
+    email: michaelcapriotti2028@u.northwestern.edu
+    affiliation: Northwestern
+repository-code: 'https://github.com/BBhattacharyya1729/QUBO_To_Ising'
