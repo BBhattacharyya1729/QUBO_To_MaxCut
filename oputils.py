@@ -158,16 +158,21 @@ def simple_PO_QUBO(mu,sigma,q=0.5,B=None,c = None):
     return bin_to_qubo(cost)
 
 '''''''''''''''''''''''''''''''''''''''''''Max Independent Set'''''''''''''''''''''''''''''''''''''''''''''''''''
+def sample_graph(n,graph='gnp'):
+    connected=False
+    G = None
+    while(not connected):
+        if(graph == 'gnp'):
+            G=nx.gnp_random_graph(n,0.25)
+        elif(graph=='nws'):
+            G=nx.newman_watts_strogatz_graph(n,3,0.5)
+        else:
+            return "?????????"
+        connected = nx.is_connected(G)
+        
+    return G
+    
 def MIS_QUBO(n,graph='gnp',A=1.1):
-    if(graph == 'gnp'):
-        G=nx.gnp_random_graph(n,0.25)
-        return  np.diag(np.ones(n))- (A/2) *nx.adjacency_matrix(G).toarray()
-    elif(graph=='nws'):
-        G=nx.newman_watts_strogatz_graph(n,3,0.5)
-        return np.diag(np.ones(n))- (A/2) *nx.adjacency_matrix(G).toarray()
-    elif(graph=='regular'):
-        G=nx.random_regular_graph(3,n)
-        return np.diag(np.ones(n))-(A/2) *nx.adjacency_matrix(G).toarray()
-    else:
-        return "????"
+    G = sample_graph(n,graph)
+    return  np.diag(np.ones(n))- (A/2) *nx.adjacency_matrix(G).toarray()
 

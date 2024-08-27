@@ -89,14 +89,6 @@ def Q3_data(theta_list,rotation=None,z_rot=None):
     mixer_ops = lambda t:  [SU2_op(np.sin(v[0])*np.cos(v[1]),np.sin(v[0])*np.sin(v[1]),np.cos(v[0]),t) for v in angles]
     return init,mixer_ops
 
-
-def PSC_data(z,theta):
-    thetas = {-1:theta,1:np.pi-theta}
-    init = reduce(lambda a,b: np.kron(a,b), [np.array([np.cos(thetas[v]/2), np.sin(thetas[v]/2)],dtype='complex128') for v in z])
-    mixer_ops = lambda t: [ SU2_op(np.sin(thetas[v]),0, np.cos(thetas[v]), t ) for v in z]
-    return init,mixer_ops
-
-
 def single_circuit_optimization_eff(precomp,opt,mixer_ops,init,p,param_guess=None):
 
     history = {"cost": [], "params": []} if param_guess is None else {"cost": [expval(precomp,QAOA_eval(precomp,param_guess,mixer_ops=mixer_ops,init=init))], "params": [param_guess]}
@@ -145,7 +137,7 @@ def initialize(A,BM_kwargs={"iters":100, "reps":50, "eta":0.05},GW_kwargs={"reps
     v,M=brute_force_maxcut(A)
     return [precomp,BM2_theta_list,BM3_theta_list,GW2_theta_list,GW3_theta_list,v,M]
 
-def warmstart_comp(A,opt,p_max,rotation_options=[None,0,-1],BM_kwargs={"iters":100, "reps":50, "eta":0.05},GW_kwargs={"reps":50},reps=10,optimizer_kwargs={'name':None,'verbose':True},ws_list=['BM2','BM3','GW2','GW3',None],initial_data=None,keep_hist=False):
+def warmstart_comp(A,opt,p_max=5,rotation_options=[None,0,-1],BM_kwargs={"iters":100, "reps":50, "eta":0.05},GW_kwargs={"reps":50},reps=10,optimizer_kwargs={'name':None,'verbose':True},ws_list=['BM2','BM3','GW2','GW3',None],initial_data=None,keep_hist=False):
     ###initialization
     if(initial_data is None):
         precomp = pre_compute(A)
@@ -506,15 +498,14 @@ def prob_boxplot(prob, p_data,path=None):
 def final_boxplot(prob, p_data,path=None):
     ws_list=['BM2', 'BM3', 'GW2', 'GW3']
     comparison_data, best_angle_data, ws_data = p_data[prob][:-1]
-    M = [d[-1] for d in ws_data]
-    fig,ax = plt.subplots(1,2,figsize=(10,6))
+    A_list = p_data[prob][-1]
+    m = np.array([-brute_force_maxcut(-A)[-1] for A in A_list])
+    M = np.array([d[-1] for d in ws_data])
+    plt.figure(figsize=(10,6))
     plt.suptitle(prob + " -1 Warmstart Comparison")
-    ax[0].boxplot([abs(np.array(comparison_data[ws][-1]['cost'])-M)/M for ws in ws_list],0,'',label=ws_list)
-    ax[0].set_ylabel('Relative Error')
-    ax[0].legend()
-    ax[1].boxplot([comparison_data[w][-1]['probs'] for w in ws_list],0,'',label=ws_list)
-    ax[1].legend()
-    ax[1].set_ylabel('Probability')
+    plt.boxplot([(M-np.array(comparison_data[ws][-1]['cost']))/(M-m) for ws in ws_list],0,'',label=ws_list)
+    plt.ylabel('Instance Specific Relative Error')
+    plt.legend()
     if(path is not None):
             plt.savefig(path+".pdf",dpi=300)
     plt.show()
