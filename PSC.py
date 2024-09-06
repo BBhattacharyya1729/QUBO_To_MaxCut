@@ -37,7 +37,7 @@ def PSC_pre_compute(Q):
 
 def PSC_opt_sampling_prob(v,precomp,params,mixer_ops=None,init=None):
     psi = QAOA_eval(precomp,params,mixer_ops,init)
-    return np.sum(abs(psi[[np.sum([2**i * v for i,v in enumerate(l[::-1])]) for l in [map_reduce(_) for _ in v]]])**2)
+    return np.sum(abs(psi[[np.sum([2**i * v for i,v in enumerate(l[::-1])]) for l in [map_reduce(_) for _ in v]]])**2)/2
 
 
 def PSC_Run(A,opt,p_max,optimizer_kwargs={'name':None,'verbose':True},keep_hist=False,eps=0.1,reps=10):
@@ -63,7 +63,7 @@ def PSC_Run(A,opt,p_max,optimizer_kwargs={'name':None,'verbose':True},keep_hist=
         l=circuit_optimization_eff(precomp,opt,mixer_ops,init,p,reps=reps,param_guesses=guess,**optimizer_kwargs)
         opt_data[p]['cost']=l[0]
         opt_data[p]['params']=l[1]
-        opt_data[p]['probs']=np.array([PSC_opt_sampling_prob(v,precomp,param,mixer_ops=None,init=None) for param in l[1]])
+        opt_data[p]['probs']=np.array([PSC_opt_sampling_prob(v,precomp,param,mixer_ops=mixer_ops,init=init) for param in l[1]])
         opt_params = list(l[1][np.argmax(l[0])])[:p] + [0] + list(l[1][np.argmax(l[0])])[p:] + [0]
 
         if(keep_hist):
@@ -72,133 +72,133 @@ def PSC_Run(A,opt,p_max,optimizer_kwargs={'name':None,'verbose':True},keep_hist=
     return opt_data
 
 
-def get_PSC_depth_cost_comp(prob,idx_dict,DATA,M_list,A_list,path=None,p_max=5):
-    fig = plt.figure(figsize=(10,10))
+# def get_PSC_depth_cost_comp(prob,idx_dict,DATA,M_list,A_list,path=None,p_max=5):
+#     fig = plt.figure(figsize=(10,10))
     
-    mean_data = np.zeros(p_max+1)
-    for idx in range(*idx_dict[prob]):
-        M = M_list[idx]
-        A = A_list[idx]
-        mean_data+=np.array([abs(np.max(l)-(M+np.sum(-A_list[:-1,:-1])/4))/(M+np.sum(-A_list[:-1,:-1])/4) for l in [DATA[idx][p][ws]['cost'] for p in range(0,1+p_max)]])
-    plt.plot(range(0,p_max+1),np.log10(mean_data/(idx_dict[prob][1]-idx_dict[prob][0])),label=str(ws)+" ")
+#     mean_data = np.zeros(p_max+1)
+#     for idx in range(*idx_dict[prob]):
+#         M = M_list[idx]
+#         A = A_list[idx]
+#         mean_data+=np.array([abs(np.max(l)-(M+np.sum(-A_list[:-1,:-1])/4))/(M+np.sum(-A_list[:-1,:-1])/4) for l in [DATA[idx][p][ws]['cost'] for p in range(0,1+p_max)]])
+#     plt.plot(range(0,p_max+1),np.log10(mean_data/(idx_dict[prob][1]-idx_dict[prob][0])),label=str(ws)+" ")
         
-    plt.title(prob)
-    plt.xlabel('p')
-    plt.ylabel('Log Relative Error')
-    plt.legend()
-    if(path is not None):
-        plt.savefig(path+".pdf",dpi=300)
-    plt.show()
+#     plt.title(prob)
+#     plt.xlabel('p')
+#     plt.ylabel('Log Relative Error')
+#     plt.legend()
+#     if(path is not None):
+#         plt.savefig(path+".pdf",dpi=300)
+#     plt.show()
 
 
-def get_depth_cost_comp(prob,idx_dict,PSC_DATA,DATA,M_list,A_list,ws_list=[None, 'GW2','GW3'],path=None,p_max=5):
-    fig = plt.figure(figsize=(10,10))
-    for ws in ws_list:
-        if(ws is None):
-            mean_data = np.zeros(p_max+1)
-            for idx in range(*idx_dict[prob]):
-                M = M_list[idx]
-                A = A_list[idx]
-                mean_data+=np.array([abs(np.max(l)-M)/(M+np.sum(-A[:-1,:-1])/4) for l in [DATA[idx][p][ws]['cost'] for p in range(0,1+p_max)]])
-            plt.plot(range(0,p_max+1),np.log10(mean_data/(idx_dict[prob][1]-idx_dict[prob][0])),label=str(ws)+" ")
-        else:
-            for r in [0,-1,None]:
-                mean_data = np.zeros(p_max+1)
-                for idx in range(*idx_dict[prob]):
-                    M = M_list[idx]
-                    A = A_list[idx]
-                    mean_data+=np.array([abs(np.max(l)-M)/(M+np.sum(-A[:-1,:-1])/4) for l in [DATA[idx][p][ws][r]['cost'] for p in range(0,1+p_max)]])
-                plt.plot(range(0,p_max+1),np.log10(mean_data/(idx_dict[prob][1]-idx_dict[prob][0])),label=str(ws)+" "+str(r))
-    for idx in range(*idx_dict[prob]):
-        M = M_list[idx]
-        A = A_list[idx]
-        mean_data+=np.array([abs(np.max(l)-(M+np.sum(-A[:-1,:-1])/4))/(M+np.sum(-A[:-1,:-1])/4) for l in [PSC_DATA[idx][p]['cost'] for p in range(0,1+p_max)]])
-    plt.plot(range(0,p_max+1),np.log10(mean_data/(idx_dict[prob][1]-idx_dict[prob][0])), label = 'PSC')
+# def get_depth_cost_comp(prob,idx_dict,PSC_DATA,DATA,M_list,A_list,ws_list=[None, 'GW2','GW3'],path=None,p_max=5):
+#     fig = plt.figure(figsize=(10,10))
+#     for ws in ws_list:
+#         if(ws is None):
+#             mean_data = np.zeros(p_max+1)
+#             for idx in range(*idx_dict[prob]):
+#                 M = M_list[idx]
+#                 A = A_list[idx]
+#                 mean_data+=np.array([abs(np.max(l)-M)/(M+np.sum(-A[:-1,:-1])/4) for l in [DATA[idx][p][ws]['cost'] for p in range(0,1+p_max)]])
+#             plt.plot(range(0,p_max+1),np.log10(mean_data/(idx_dict[prob][1]-idx_dict[prob][0])),label=str(ws)+" ")
+#         else:
+#             for r in [0,-1,None]:
+#                 mean_data = np.zeros(p_max+1)
+#                 for idx in range(*idx_dict[prob]):
+#                     M = M_list[idx]
+#                     A = A_list[idx]
+#                     mean_data+=np.array([abs(np.max(l)-M)/(M+np.sum(-A[:-1,:-1])/4) for l in [DATA[idx][p][ws][r]['cost'] for p in range(0,1+p_max)]])
+#                 plt.plot(range(0,p_max+1),np.log10(mean_data/(idx_dict[prob][1]-idx_dict[prob][0])),label=str(ws)+" "+str(r))
+#     for idx in range(*idx_dict[prob]):
+#         M = M_list[idx]
+#         A = A_list[idx]
+#         mean_data+=np.array([abs(np.max(l)-(M+np.sum(-A[:-1,:-1])/4))/(M+np.sum(-A[:-1,:-1])/4) for l in [PSC_DATA[idx][p]['cost'] for p in range(0,1+p_max)]])
+#     plt.plot(range(0,p_max+1),np.log10(mean_data/(idx_dict[prob][1]-idx_dict[prob][0])), label = 'PSC')
        
-    plt.title(prob)
-    plt.xlabel('p')
-    plt.ylabel('Log Relative Error')
-    plt.legend()
-    if(path is not None):
-        plt.savefig(path+".pdf",dpi=300)
-    plt.show()
+#     plt.title(prob)
+#     plt.xlabel('p')
+#     plt.ylabel('Log Relative Error')
+#     plt.legend()
+#     if(path is not None):
+#         plt.savefig(path+".pdf",dpi=300)
+#     plt.show()
 
 
-def get_depth_prob_comp(prob,idx_dict,PSC_DATA,DATA,M_list,A_list,ws_list=[None, 'GW2','GW3'],path=None,p_max=5):
-    fig = plt.figure(figsize=(10,10))
-    for ws in ws_list:
-        if(ws is None):
-            mean_data = np.zeros(p_max+1)
-            for idx in range(*idx_dict[prob]):
-                M = M_list[idx]
-                mean_data+=np.array([abs(np.max(l)) for l in [DATA[idx][p][ws]['probs'] for p in range(0,1+p_max)]])
-            plt.plot(range(0,p_max+1),np.log10(1-mean_data/(idx_dict[prob][1]-idx_dict[prob][0])),label=str(ws)+" ")
-        else:
-            for r in [0,-1,None]:
-                mean_data = np.zeros(p_max+1)
-                for idx in range(*idx_dict[prob]):
-                    M = M_list[idx]
-                    mean_data+=np.array([abs(np.max(l)) for l in [DATA[idx][p][ws][r]['probs'] for p in range(0,1+p_max)]])
-                plt.plot(range(0,p_max+1),np.log10(1-mean_data/(idx_dict[prob][1]-idx_dict[prob][0])),label=str(ws)+" "+str(r))
-    for idx in range(*idx_dict[prob]):
-        M = M_list[idx]
-        A = A_list[idx]
-        mean_data+=np.array([abs(np.max(l)) for l in [PSC_DATA[idx][p]['probs'] for p in range(0,1+p_max)]])
-    plt.plot(range(0,p_max+1),np.log10(1-mean_data/(idx_dict[prob][1]-idx_dict[prob][0])),label="PSC")
-    plt.title(prob)
-    plt.xlabel('p (Depth)')
-    plt.ylabel('Probabilty')
-    plt.legend()
-    if(path is not None):
-        plt.savefig(path+".pdf",dpi=300)
-    plt.show()
+# def get_depth_prob_comp(prob,idx_dict,PSC_DATA,DATA,M_list,A_list,ws_list=[None, 'GW2','GW3'],path=None,p_max=5):
+#     fig = plt.figure(figsize=(10,10))
+#     for ws in ws_list:
+#         if(ws is None):
+#             mean_data = np.zeros(p_max+1)
+#             for idx in range(*idx_dict[prob]):
+#                 M = M_list[idx]
+#                 mean_data+=np.array([abs(np.max(l)) for l in [DATA[idx][p][ws]['probs'] for p in range(0,1+p_max)]])
+#             plt.plot(range(0,p_max+1),np.log10(1-mean_data/(idx_dict[prob][1]-idx_dict[prob][0])),label=str(ws)+" ")
+#         else:
+#             for r in [0,-1,None]:
+#                 mean_data = np.zeros(p_max+1)
+#                 for idx in range(*idx_dict[prob]):
+#                     M = M_list[idx]
+#                     mean_data+=np.array([abs(np.max(l)) for l in [DATA[idx][p][ws][r]['probs'] for p in range(0,1+p_max)]])
+#                 plt.plot(range(0,p_max+1),np.log10(1-mean_data/(idx_dict[prob][1]-idx_dict[prob][0])),label=str(ws)+" "+str(r))
+#     for idx in range(*idx_dict[prob]):
+#         M = M_list[idx]
+#         A = A_list[idx]
+#         mean_data+=np.array([abs(np.max(l)) for l in [PSC_DATA[idx][p]['probs'] for p in range(0,1+p_max)]])
+#     plt.plot(range(0,p_max+1),np.log10(1-mean_data/(idx_dict[prob][1]-idx_dict[prob][0])),label="PSC")
+#     plt.title(prob)
+#     plt.xlabel('p (Depth)')
+#     plt.ylabel('Probabilty')
+#     plt.legend()
+#     if(path is not None):
+#         plt.savefig(path+".pdf",dpi=300)
+#     plt.show()
 
 
 
-def get_PSC_depth_cost_comp(prob,idx_dict,DATA,M_list,A_list,path=None,p_max=5):
-    fig = plt.figure(figsize=(10,10))
+# def get_PSC_depth_cost_comp(prob,idx_dict,DATA,M_list,A_list,path=None,p_max=5):
+#     fig = plt.figure(figsize=(10,10))
     
-    mean_data = np.zeros(p_max+1)
+#     mean_data = np.zeros(p_max+1)
      
-    plt.title(prob)
-    plt.xlabel('p')
-    plt.ylabel('Log Relative Error')
-    plt.legend()
-    if(path is not None):
-        plt.savefig(path+".pdf",dpi=300)
-    plt.show()
+#     plt.title(prob)
+#     plt.xlabel('p')
+#     plt.ylabel('Log Relative Error')
+#     plt.legend()
+#     if(path is not None):
+#         plt.savefig(path+".pdf",dpi=300)
+#     plt.show()
 
 
-def get_PSC_depth_prob_comp(prob,idx_dict,DATA,M_list,A_list,path=None,p_max=5):
-    fig = plt.figure(figsize=(10,10))
+# def get_PSC_depth_prob_comp(prob,idx_dict,DATA,M_list,A_list,path=None,p_max=5):
+#     fig = plt.figure(figsize=(10,10))
     
-    mean_data = np.zeros(p_max+1)
-    for idx in range(*idx_dict[prob]):
-        M = M_list[idx]
-        A = A_list[idx]
-        mean_data+=np.array([abs(np.max(l)) for l in [DATA[idx][p]['probs'] for p in range(0,1+p_max)]])
-    plt.plot(range(0,p_max+1),np.log10(1-mean_data/(idx_dict[prob][1]-idx_dict[prob][0])),label="PSC")
+#     mean_data = np.zeros(p_max+1)
+#     for idx in range(*idx_dict[prob]):
+#         M = M_list[idx]
+#         A = A_list[idx]
+#         mean_data+=np.array([abs(np.max(l)) for l in [DATA[idx][p]['probs'] for p in range(0,1+p_max)]])
+#     plt.plot(range(0,p_max+1),np.log10(1-mean_data/(idx_dict[prob][1]-idx_dict[prob][0])),label="PSC")
         
-    plt.title(prob)
-    plt.xlabel('p')
-    plt.ylabel('1 - log prob')
-    plt.legend()
-    if(path is not None):
-        plt.savefig(path+".pdf",dpi=300)
-    plt.show()
+#     plt.title(prob)
+#     plt.xlabel('p')
+#     plt.ylabel('1 - log prob')
+#     plt.legend()
+#     if(path is not None):
+#         plt.savefig(path+".pdf",dpi=300)
+#     plt.show()
 
-def get_PSC_depth_prob_comp(prob,idx_dict,DATA,M_list,A_list,path=None,p_max=5):
-    fig = plt.figure(figsize=(10,10))
+# def get_PSC_depth_prob_comp(prob,idx_dict,DATA,M_list,A_list,path=None,p_max=5):
+#     fig = plt.figure(figsize=(10,10))
     
-    mean_data = np.zeros(p_max+1)
+#     mean_data = np.zeros(p_max+1)
        
-    plt.title(prob)
-    plt.xlabel('p')
-    plt.ylabel('1 - log prob')
-    plt.legend()
-    if(path is not None):
-        plt.savefig(path+".pdf",dpi=300)
-    plt.show()
+#     plt.title(prob)
+#     plt.xlabel('p')
+#     plt.ylabel('1 - log prob')
+#     plt.legend()
+#     if(path is not None):
+#         plt.savefig(path+".pdf",dpi=300)
+#     plt.show()
 
 
 
@@ -212,58 +212,58 @@ def get_PSC_depth_prob_comp(prob,idx_dict,DATA,M_list,A_list,path=None,p_max=5):
 
 
 
-def get_depth_cost_comp(prob, idx_dict, PSC_DATA, DATA, M_list, A_list, ws_list=[None, 'GW2', 'GW3'], path=None, p_max=5):
-    fig = plt.figure(figsize=(10,10))
+# def get_depth_cost_comp(prob, idx_dict, PSC_DATA, DATA, M_list, A_list, ws_list=[None, 'GW2', 'GW3'], path=None, p_max=5):
+#     fig = plt.figure(figsize=(10,10))
     
-    for ws in ws_list:
-        if ws is None:
-            data = []
-            for idx in range(*idx_dict[prob]):
-                M = M_list[idx]
-                A = A_list[idx]
-                data.append([abs(np.max(l)-M)/(M+np.sum(-A[:-1,:-1])/4) for l in [DATA[idx][p][ws]['cost'] for p in range(0, 1+p_max)]])
-            mean_data = np.mean(data, axis=0)
-            std_dev_data = np.std(data, axis=0)
-            plt.plot(range(0, p_max+1), np.log10(mean_data), marker='o', label=str(ws)+" ")
-            plt.fill_between(range(0, p_max+1), 
-                             np.log10(mean_data - 0.5 * std_dev_data), 
-                             np.log10(mean_data + 0.5 * std_dev_data), 
-                             alpha=0.2)
-        else:
-            for r in [0, -1, None]:
-                data = []
-                for idx in range(*idx_dict[prob]):
-                    M = M_list[idx]
-                    A = A_list[idx]
-                    data.append([abs(np.max(l)-M)/(M+np.sum(-A[:-1,:-1])/4) for l in [DATA[idx][p][ws][r]['cost'] for p in range(0, 1+p_max)]])
-                mean_data = np.mean(data, axis=0)
-                std_dev_data = np.std(data, axis=0)
-                plt.plot(range(0, p_max+1), np.log10(mean_data), marker='o', label=str(ws)+" "+str(r))
-                plt.fill_between(range(0, p_max+1), 
-                                 np.log10(mean_data - 0.5 * std_dev_data), 
-                                 np.log10(mean_data + 0.5 * std_dev_data), 
-                                 alpha=0.2)
+#     for ws in ws_list:
+#         if ws is None:
+#             data = []
+#             for idx in range(*idx_dict[prob]):
+#                 M = M_list[idx]
+#                 A = A_list[idx]
+#                 data.append([abs(np.max(l)-M)/(M+np.sum(-A[:-1,:-1])/4) for l in [DATA[idx][p][ws]['cost'] for p in range(0, 1+p_max)]])
+#             mean_data = np.mean(data, axis=0)
+#             std_dev_data = np.std(data, axis=0)
+#             plt.plot(range(0, p_max+1), np.log10(mean_data), marker='o', label=str(ws)+" ")
+#             plt.fill_between(range(0, p_max+1), 
+#                              np.log10(mean_data - 0.5 * std_dev_data), 
+#                              np.log10(mean_data + 0.5 * std_dev_data), 
+#                              alpha=0.2)
+#         else:
+#             for r in [0, -1, None]:
+#                 data = []
+#                 for idx in range(*idx_dict[prob]):
+#                     M = M_list[idx]
+#                     A = A_list[idx]
+#                     data.append([abs(np.max(l)-M)/(M+np.sum(-A[:-1,:-1])/4) for l in [DATA[idx][p][ws][r]['cost'] for p in range(0, 1+p_max)]])
+#                 mean_data = np.mean(data, axis=0)
+#                 std_dev_data = np.std(data, axis=0)
+#                 plt.plot(range(0, p_max+1), np.log10(mean_data), marker='o', label=str(ws)+" "+str(r))
+#                 plt.fill_between(range(0, p_max+1), 
+#                                  np.log10(mean_data - 0.5 * std_dev_data), 
+#                                  np.log10(mean_data + 0.5 * std_dev_data), 
+#                                  alpha=0.2)
     
-    data = []
-    for idx in range(*idx_dict[prob]):
-        M = M_list[idx]
-        A = A_list[idx]
-        data.append([abs(np.max(l)-(M+np.sum(-A[:-1,:-1])/4))/(M+np.sum(-A[:-1,:-1])/4) for l in [PSC_DATA[idx][p]['cost'] for p in range(0, 1+p_max)]])
-    mean_data = np.mean(data, axis=0)
-    std_dev_data = np.std(data, axis=0)
-    plt.plot(range(0, p_max+1), np.log10(mean_data), marker='o', label='PSC')
-    plt.fill_between(range(0, p_max+1), 
-                     np.log10(mean_data - 0.5 * std_dev_data), 
-                     np.log10(mean_data + 0.5 * std_dev_data), 
-                     alpha=0.2)
+#     data = []
+#     for idx in range(*idx_dict[prob]):
+#         M = M_list[idx]
+#         A = A_list[idx]
+#         data.append([abs(np.max(l)-(M+np.sum(-A[:-1,:-1])/4))/(M+np.sum(-A[:-1,:-1])/4) for l in [PSC_DATA[idx][p]['cost'] for p in range(0, 1+p_max)]])
+#     mean_data = np.mean(data, axis=0)
+#     std_dev_data = np.std(data, axis=0)
+#     plt.plot(range(0, p_max+1), np.log10(mean_data), marker='o', label='PSC')
+#     plt.fill_between(range(0, p_max+1), 
+#                      np.log10(mean_data - 0.5 * std_dev_data), 
+#                      np.log10(mean_data + 0.5 * std_dev_data), 
+#                      alpha=0.2)
     
-    plt.title(prob)
-    plt.xlabel('p')
-    plt.ylabel('Log Relative Error')
-    plt.legend()
-    if path is not None:
-        plt.savefig(path+".pdf", dpi=300)
-    plt.show()
+#     plt.title(prob)
+#     plt.xlabel('p')
+#     plt.ylabel('Log Relative Error')
+#     plt.legend()
+#     if path is not None:
+#         plt.savefig(path+".pdf", dpi=300)
+#     plt.show()
 
 
 
