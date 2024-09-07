@@ -1,6 +1,6 @@
 from QAOAUtils import *
 import scipy
-def relax_solve(Q,reps=10):
+def relax_solve(Q,reps=50):
     x = []
     f = []
     for i in range(reps):
@@ -8,6 +8,15 @@ def relax_solve(Q,reps=10):
         x.append(res.x)
         f.append(-res.fun)
     return x[np.argmax(f)]
+
+def PO_solve(mu,sigma,B=len(mu)//2):
+    x = cp.Variable(len(mu))
+    lam = np.sum(np.abs(mu)) + np.sum(np.abs(sigma))
+    objective = cp.Minimize(-(mu @ x -0.5*(x @ sigma @ x ) - lam*(B-cp.sum(x))**2))
+    constraints = [0 <= x, x <= 1]
+    prob = cp.Problem(objective, constraints)
+    result = prob.solve()
+    return x.value
 
 def PSC_data(vals,eps=0.1):
     thetas = []
@@ -40,12 +49,15 @@ def PSC_opt_sampling_prob(v,precomp,params,mixer_ops=None,init=None):
     return np.sum(abs(psi[[np.sum([2**i * v for i,v in enumerate(l[::-1])]) for l in [map_reduce(_) for _ in v]]])**2)/2
 
 
-def PSC_Run(A,opt,p_max,optimizer_kwargs={'name':None,'verbose':True},keep_hist=False,eps=0.1,reps=10):
+def PSC_Run(A,opt,p_max,optimizer_kwargs={'name':None,'verbose':True},keep_hist=False,eps=0.1,reps=10,PSC_data=None):
     ###initialization
     Q = -A[:-1,:-1]
     precomp = PSC_pre_compute(Q)
     v,M=brute_force_maxcut(A)
-    vals = relax_solve(Q)
+    if(PSC_data is None):
+        vals = relax_solve(Q)
+    else:
+        vals = PO_solve(PSC_data['mu'],PSC_data['sigma'],B=len(mu)//2)
     init,mixer_ops=PSC_data(vals,eps=eps)
 
     opt_data =[{} for _ in range(p_max+1)]
