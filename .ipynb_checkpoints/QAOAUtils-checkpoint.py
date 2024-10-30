@@ -513,8 +513,8 @@ def final_boxplot(prob, p_data,path=None):
     plt.show()
 
 
-def get_depth_combined(prob, idx_dict, PSC_DATA, DATA, M_list, A_list, path=None, p_max=5, std=.25):
-    fig, axs = plt.subplots(2, 4, figsize=(32, 6), sharey='row')  # 2x4 grid for all plots
+def get_depth_combined(prob, idx_dict, PSC_DATA, DATA, PSC_DATA50, M_list, A_list, path=None, p_max=5, std=.25):
+    fig, axs = plt.subplots(2, 4, figsize=(38.4, 7.2), sharey='row')  # 2x4 grid for all plots
 
     plt.subplots_adjust(wspace=0, hspace=0.15)  # Adjust spacing
 
@@ -534,11 +534,11 @@ def get_depth_combined(prob, idx_dict, PSC_DATA, DATA, M_list, A_list, path=None
                                  for l in [DATA[idx][p][ws]['probs'] for p in range(0, 1 + p_max)]])
                 mean_data = np.mean(data, axis=0)
                 std_dev_data = np.std(data, axis=0)
-                ax.plot(range(0, p_max + 1), mean_data, marker=markers[marker_idx % len(markers)], linestyle='--', label="None")
+                line, = ax.plot(range(0, p_max + 1), mean_data, marker=markers[marker_idx % len(markers)], linestyle='--', label="None")
                 ax.fill_between(range(0, p_max + 1), 
                                 (mean_data - std * std_dev_data), 
                                 (mean_data + std * std_dev_data), 
-                                alpha=0.2)
+                                alpha=0.2, color=line.get_color())
                 marker_idx += 1  # Increment marker index
             else:
                 for r, label in zip([0, -1, None], ['Warmstart First Rotation', 'Warmstart Last Rotation', 'Warmstart No Rotation']):
@@ -550,13 +550,13 @@ def get_depth_combined(prob, idx_dict, PSC_DATA, DATA, M_list, A_list, path=None
                                      for l in [DATA[idx][p][ws][r]['probs'] for p in range(0, 1 + p_max)]])
                     mean_data = np.mean(data, axis=0)
                     std_dev_data = np.std(data, axis=0)
-                    ax.plot(range(0, p_max + 1), mean_data, marker=markers[marker_idx % len(markers)], label=label)
+                    line, = ax.plot(range(0, p_max + 1), mean_data, marker=markers[marker_idx % len(markers)], label=label)
                     ax.fill_between(range(0, p_max + 1), 
                                     (mean_data - std * std_dev_data), 
                                     (mean_data + std * std_dev_data), 
-                                    alpha=0.2)
+                                    alpha=0.2, color=line.get_color())
                     marker_idx += 1  # Increment marker index
-        
+        #PSC
         data = []
         for idx in range(*idx_dict[prob]):
             M = M_list[idx]
@@ -565,25 +565,40 @@ def get_depth_combined(prob, idx_dict, PSC_DATA, DATA, M_list, A_list, path=None
                          for l in [PSC_DATA[idx][p]['probs'] for p in range(0, 1 + p_max)]])
         mean_data = np.mean(data, axis=0)
         std_dev_data = np.std(data, axis=0)
-        ax.plot(range(0, p_max + 1), mean_data, marker=markers[marker_idx % len(markers)], label='PSC')
+        line, = ax.plot(range(0, p_max + 1), mean_data, marker=markers[marker_idx % len(markers)], label='PSC')
         ax.fill_between(range(0, p_max + 1), 
                         (mean_data - std * std_dev_data), 
                         (mean_data + std * std_dev_data), 
-                        alpha=0.2)
+                        alpha=0.2, color=line.get_color())
+        #PSC_50
+        data_50 = []
+        for idx in range(*idx_dict[prob]):
+            M = M_list[idx]
+            A = A_list[idx]
+            data_50.append([abs(np.max(l))  
+                            for l in [PSC_DATA50[idx][p]['probs'] for p in range(0, 1 + p_max)]])
+        mean_data_50 = np.mean(data_50, axis=0)
+        std_dev_data_50 = np.std(data_50, axis=0)
+        line, = ax.plot(range(0, p_max + 1), mean_data_50, marker=markers[marker_idx % len(markers)], label='PSC50', color='goldenrod')
+        ax.fill_between(range(0, p_max + 1), 
+                        (mean_data_50 - std * std_dev_data_50), 
+                        (mean_data_50 + std * std_dev_data_50),
+                        color=line.get_color(), alpha=0.2)
         ax.legend().remove()  # Remove legend
 
     def plot_cost(ws_list, ax):
-        def compute_and_plot(data, ws, r, ax, label_suffix, line_style='-'):
+        def compute_and_plot(data, ws, r, ax, label_suffix, line_style='-', fill_color=None, color=None):
             mean_data = np.mean(data, axis=0)
             std_dev_data = np.std(data, axis=0)
-            ax.plot(range(0, p_max + 1), mean_data, marker=markers[marker_idx % len(markers)], label=f'{ws} {label_suffix}', linestyle=line_style)
+            line, = ax.plot(range(0, p_max + 1), mean_data, marker=markers[marker_idx % len(markers)], label=f'{ws} {label_suffix}', linestyle=line_style, color=color)
             ax.fill_between(range(0, p_max + 1), 
                             mean_data - std * std_dev_data, 
                             mean_data + std * std_dev_data, 
-                            alpha=0.2)
+                            alpha=0.2, color=line.get_color())
     
         ws_data = {0: [], -1: [], None: []}
         psc_data = []
+        psc_data50 = []
         none_data = []
         marker_idx = 0  # Initialize marker index
     
@@ -602,6 +617,9 @@ def get_depth_combined(prob, idx_dict, PSC_DATA, DATA, M_list, A_list, path=None
             
             psc_data.append([(np.max(l) - m - np.sum(-A[:-1, :-1]) / 4) / (M - m) 
                              for l in [PSC_DATA[idx][p]['cost'] for p in range(0, 1 + p_max)]])
+
+            psc_data50.append([(np.max(l) - m - np.sum(-A[:-1, :-1]) / 4) / (M - m) 
+                               for l in [PSC_DATA50[idx][p]['cost'] for p in range(0, 1 + p_max)]])
     
         compute_and_plot(none_data, 'None', "", ax, label_suffix="", line_style='--')
         marker_idx += 1  # Increment marker index
@@ -611,6 +629,7 @@ def get_depth_combined(prob, idx_dict, PSC_DATA, DATA, M_list, A_list, path=None
                 marker_idx += 1  # Increment marker index
     
         compute_and_plot(psc_data, 'PSC', "", ax, label_suffix="")
+        compute_and_plot(psc_data50, 'PSC50', "", ax, label_suffix="", fill_color="goldenrod", color="goldenrod")
         ax.legend().remove()  # Remove legend
     
     # Plot the depth graphs in the first row
@@ -657,11 +676,31 @@ def get_depth_combined(prob, idx_dict, PSC_DATA, DATA, M_list, A_list, path=None
 
     # Create a legend at the bottom center
     handles, labels = axs[0, 0].get_legend_handles_labels()
-    fig.legend(handles, ['No Warmstart', 'Warmstart First Rotation', 'Warmstart Last Rotation', 'Warmstart No Rotation', 'PSC'], loc='lower center', bbox_to_anchor=(0.5, -0.15), ncol=5, fontsize=20)
+    fig.legend(handles, ['No Warmstart', 'Warmstart First Rotation', 'Warmstart Last Rotation', 'Warmstart No Rotation', 'Qubo Relaxed (10 Initalizations)', 'Qubo Relaxed (50 Initalizations)'], loc='lower center', bbox_to_anchor=(0.5, -0.1), ncol=6, fontsize=20,)
     fig.suptitle(f"{prob}", fontsize=30, y=0.97)
     
     if path is not None:
         plt.savefig(path + ".pdf", dpi=300, bbox_inches='tight')
     
+    plt.show()
+
+
+def plot_distance(prob, DATA1, DATA2, prob1="10 Initializations", prob2="50 Initializations", path=None):
+    fig, ax = plt.subplots(figsize=(10, 6))
+    fig.suptitle(prob, fontsize=16)
+    
+    # Stacked histogram
+    ax.hist([DATA1, DATA2], edgecolor='black', density=True, stacked=True, label=[prob1, prob2])
+    ax.set_xlabel('Distance To Solution', fontsize=12)
+    ax.set_ylabel('Frequency', fontsize=12, )
+    ax.legend(loc='upper left')
+    ax.yaxis.set_label_position("left")
+    ax.yaxis.set_label_coords(-0.05, 0.5)
+    
+    # Save the figure if a path is specified
+    if path is not None:
+        plt.savefig(path + ".pdf", dpi=300)
+    
+    plt.tight_layout(rect=[0, 0.03, 1, 0.999])
     plt.show()
 
