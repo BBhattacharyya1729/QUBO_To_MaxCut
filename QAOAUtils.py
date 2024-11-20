@@ -518,7 +518,7 @@ def get_depth_combined(prob, idx_dict, PSC_DATA, DATA, PSC_DATA50, M_list, A_lis
 
     plt.subplots_adjust(wspace=0, hspace=0.15)  # Adjust spacing
 
-    markers = ['o', 'o', 'o', 'o', 'o']  # Define a list of markers
+    markers = ['o', 'o', 'o', 'o', 's']  # Define a list of markers
 
     def plot_depth(ws_list, ax):
         ax.tick_params(axis='y', which='both', length=5, width=1)
@@ -680,9 +680,164 @@ def get_depth_combined(prob, idx_dict, PSC_DATA, DATA, PSC_DATA50, M_list, A_lis
     fig.suptitle(f"{prob}", fontsize=30, y=0.97)
     
     if path is not None:
-        plt.savefig(path + ".pdf", dpi=300, bbox_inches='tight')
+        plt.savefig(path + ".pdf", dpi=600, bbox_inches='tight')
     
     plt.show()
+
+def get_depth_combined_gw3(prob, idx_dict, PSC_DATA, DATA, PSC_DATA50, M_list, A_list, path=None, p_max=5, std=.25):
+    fig, axs = plt.subplots(2, 1, figsize=(18, 10), sharex=True)  # Create 2 subplots for depth and cost
+
+    plt.subplots_adjust(wspace=0, hspace=0.1, bottom = .5)  # Adjust spacing between plots
+    markers = ['o', 'o', 'o', 'o', 's']  # Define a list of markers
+    fig.suptitle(prob, fontsize=30, y=0.94)  # Set the title with the name of `prob`
+
+    def plot_depth(ws_list, ax):
+        ax.tick_params(axis='y', which='both', length=5, width=1)
+        ax.minorticks_off()
+        marker_idx = 0  # Initialize marker index
+
+        for ws in ws_list:
+            if ws is None:
+                data = []
+                for idx in range(*idx_dict[prob]):
+                    M = M_list[idx]
+                    A = A_list[idx]
+                    data.append([abs(np.max(l))
+                                 for l in [DATA[idx][p][ws]['probs'] for p in range(0, 1 + p_max)]])
+                mean_data = np.mean(data, axis=0)
+                std_dev_data = np.std(data, axis=0)
+                line, = ax.plot(range(0, p_max + 1), mean_data, marker=markers[marker_idx % len(markers)], linestyle='--', label="None")
+                ax.fill_between(range(0, p_max + 1), 
+                                (mean_data - std * std_dev_data), 
+                                (mean_data + std * std_dev_data), 
+                                alpha=0.2, color=line.get_color())
+                marker_idx += 1  # Increment marker index
+            else:
+                for r, label in zip([0, -1, None], ['Warmstart First Rotation', 'Warmstart Last Rotation', 'Warmstart No Rotation']):
+                    data = []
+                    for idx in range(*idx_dict[prob]):
+                        M = M_list[idx]
+                        A = A_list[idx]
+                        data.append([abs(np.max(l))
+                                     for l in [DATA[idx][p][ws][r]['probs'] for p in range(0, 1 + p_max)]])
+                    mean_data = np.mean(data, axis=0)
+                    std_dev_data = np.std(data, axis=0)
+                    line, = ax.plot(range(0, p_max + 1), mean_data, marker=markers[marker_idx % len(markers)], label=label)
+                    ax.fill_between(range(0, p_max + 1), 
+                                    (mean_data - std * std_dev_data), 
+                                    (mean_data + std * std_dev_data), 
+                                    alpha=0.2, color=line.get_color())
+                    marker_idx += 1  # Increment marker index
+        
+        # PSC
+        data = []
+        for idx in range(*idx_dict[prob]):
+            M = M_list[idx]
+            A = A_list[idx]
+            data.append([abs(np.max(l))  
+                         for l in [PSC_DATA[idx][p]['probs'] for p in range(0, 1 + p_max)]])
+        mean_data = np.mean(data, axis=0)
+        std_dev_data = np.std(data, axis=0)
+        line, = ax.plot(range(0, p_max + 1), mean_data, marker=markers[marker_idx % len(markers)], label='Qubo Relaxed (10 Initializations)')
+        ax.fill_between(range(0, p_max + 1), 
+                        (mean_data - std * std_dev_data), 
+                        (mean_data + std * std_dev_data), 
+                        alpha=0.2, color=line.get_color())
+        
+        # PSC_50
+        data_50 = []
+        for idx in range(*idx_dict[prob]):
+            M = M_list[idx]
+            A = A_list[idx]
+            data_50.append([abs(np.max(l))  
+                            for l in [PSC_DATA50[idx][p]['probs'] for p in range(0, 1 + p_max)]])
+        mean_data_50 = np.mean(data_50, axis=0)
+        std_dev_data_50 = np.std(data_50, axis=0)
+        line, = ax.plot(range(0, p_max + 1), mean_data_50, marker=markers[marker_idx % len(markers)], label='Qubo Relaxed (50 Initializations)', color='goldenrod')
+        ax.fill_between(range(0, p_max + 1), 
+                        (mean_data_50 - std * std_dev_data_50), 
+                        (mean_data_50 + std * std_dev_data_50),
+                        color=line.get_color(), alpha=0.2)
+        
+    def plot_cost(ws_list, ax):
+        def compute_and_plot(data, label_suffix, ax, line_style='-', fill_color=None, color=None):
+            mean_data = np.mean(data, axis=0)
+            std_dev_data = np.std(data, axis=0)
+            line, = ax.plot(range(0, p_max + 1), mean_data, marker=markers[marker_idx % len(markers)], label=label_suffix, linestyle=line_style, color=color)
+            ax.fill_between(range(0, p_max + 1), 
+                            mean_data - std * std_dev_data, 
+                            mean_data + std * std_dev_data, 
+                            alpha=0.2, color=line.get_color())
+    
+        ws_data = {0: [], -1: [], None: []}
+        psc_data = []
+        psc_data50 = []
+        none_data = []
+        marker_idx = 0  # Initialize marker index
+    
+        for idx in range(*idx_dict[prob]):
+            M = M_list[idx]
+            A = A_list[idx]
+            m = -brute_force_maxcut(-A)[-1]
+    
+            none_data.append([(np.max(l) - m) / (M - m) 
+                              for l in [DATA[idx][p][None]['cost'] for p in range(0, 1 + p_max)]])
+    
+            if ws_list[0] is not None:
+                for r in ws_data.keys():
+                    ws_data[r].append([(np.max(l) - m) / (M - m) 
+                                       for l in [DATA[idx][p][ws_list[0]][r]['cost'] for p in range(0, 1 + p_max)]])
+            
+            psc_data.append([(np.max(l) - m - np.sum(-A[:-1, :-1]) / 4) / (M - m) 
+                             for l in [PSC_DATA[idx][p]['cost'] for p in range(0, 1 + p_max)]])
+
+            psc_data50.append([(np.max(l) - m - np.sum(-A[:-1, :-1]) / 4) / (M - m) 
+                               for l in [PSC_DATA50[idx][p]['cost'] for p in range(0, 1 + p_max)]])
+    
+        compute_and_plot(none_data, 'None', axs[1], line_style='--')
+        marker_idx += 1  # Increment marker index
+        
+        if ws_list[0] is not None:
+            for r in ws_data.keys():
+                compute_and_plot(ws_data[r], f'GW3 {r}', axs[1])  # Cost plot for GW3
+                marker_idx += 1  # Increment marker index
+    
+        compute_and_plot(psc_data, 'Qubo Relaxed (10 Initializations)', axs[1])
+        compute_and_plot(psc_data50, 'Qubo Relaxed (50 Initializations)', axs[1], color='goldenrod')
+    
+    # Plot the depth and cost graphs for 'GW3'
+    plot_depth([None, 'GW3'], axs[0])  # Depth plot for GW3
+    plot_cost(['GW3'], axs[1])  # Cost plot for GW3
+    
+    # Ensure the x-axis line is visible and adjust x-axis ticks
+    for ax in axs.flat:
+        ax.spines['bottom'].set_visible(True)  # Ensure x-axis line is visible
+        ax.set_xticks(range(p_max + 1))  # Set x-axis ticks
+        ax.set_xticklabels(range(p_max + 1))  # Set x-axis labels
+    
+    # Set y-axis label only for the leftmost plot in each row
+    axs[0].set_ylabel(r'$\mathcal{P}$', fontsize=25, labelpad=10)
+    axs[1].set_ylabel(r'$\alpha$', fontsize=25, labelpad=10)  # Change 'a' to Greek alpha (α) in the y-axis label
+    
+    # Set labels for x-axis
+    axs[1].set_xlabel('p', fontsize=25)
+
+    # # Add combined legend below both subplots
+    handles, labels = axs[0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc='lower center', ncol=6, bbox_to_anchor=(0.5, .07), fontsize=12, frameon=True)
+
+    # Adjust spacing to prevent overlap with the legend
+    plt.subplots_adjust(bottom=0.2)
+
+    for ax in axs.flat:
+        ax.tick_params(axis='both', labelsize=15)  # Adjust tick label size for both axes
+
+    if path is not None:
+        plt.savefig(path + ".pdf", dpi=600, bbox_inches='tight')
+
+    plt.show()
+
+
 
 
 def plot_distance(prob, DATA1, DATA2, prob1="10 Initializations", prob2="50 Initializations", path=None):

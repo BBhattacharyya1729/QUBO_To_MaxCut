@@ -71,6 +71,7 @@ def PSC_Run(A,opt,p_max,optimizer_kwargs={'name':None,'verbose':False},keep_hist
     opt_data[0]['cost']=expval(precomp,QAOA_eval(precomp,[],mixer_ops=mixer_ops,init=init))
     opt_data[0]['params']=[]
     opt_data[0]['probs']=PSC_opt_sampling_prob(v,precomp,[],mixer_ops=mixer_ops,init=init)
+    opt_data[0]['vals']=vals
 
     for p in range(1,p_max+1):
         guess  = [opt_params] + [None] * (reps-1)
