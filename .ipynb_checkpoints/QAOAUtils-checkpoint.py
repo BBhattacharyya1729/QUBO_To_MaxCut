@@ -676,7 +676,7 @@ def get_depth_combined(prob, idx_dict, PSC_DATA, DATA, PSC_DATA50, M_list, A_lis
 
     # Create a legend at the bottom center
     handles, labels = axs[0, 0].get_legend_handles_labels()
-    fig.legend(handles, ['No Warmstart', 'Warmstart First Rotation', 'Warmstart Last Rotation', 'Warmstart No Rotation', 'Qubo Relaxed (10 Initalizations)', 'Qubo Relaxed (50 Initalizations)'], loc='lower center', bbox_to_anchor=(0.5, -0.1), ncol=6, fontsize=20,)
+    fig.legend(handles, ['No Warmstart', 'Warmstart First Rotation', 'Warmstart Last Rotation', 'Warmstart No Rotation', 'QUBO Relaxed (10 Initalizations)', 'QUBO Relaxed (50 Initalizations)'], loc='lower center', bbox_to_anchor=(0.5, -0.1), ncol=6, fontsize=20,)
     fig.suptitle(f"{prob}", fontsize=30, y=0.97)
     
     if path is not None:
@@ -685,11 +685,11 @@ def get_depth_combined(prob, idx_dict, PSC_DATA, DATA, PSC_DATA50, M_list, A_lis
     plt.show()
 
 def get_depth_combined_gw3(prob, idx_dict, PSC_DATA, DATA, PSC_DATA50, M_list, A_list, path=None, p_max=5, std=.25):
-    fig, axs = plt.subplots(2, 1, figsize=(18, 10), sharex=True)  # Create 2 subplots for depth and cost
+    fig, axs = plt.subplots(2, 1, figsize=(18, 16), sharex=True)  # Create 2 subplots for depth and cost
 
     plt.subplots_adjust(wspace=0, hspace=0.1, bottom = .5)  # Adjust spacing between plots
     markers = ['o', 'o', 'o', 'o', 's']  # Define a list of markers
-    fig.suptitle(prob, fontsize=30, y=0.94)  # Set the title with the name of `prob`
+    fig.suptitle(prob, fontsize=50, y=0.94)  # Set the title with the name of `prob`
 
     def plot_depth(ws_list, ax):
         ax.tick_params(axis='y', which='both', length=5, width=1)
@@ -738,7 +738,7 @@ def get_depth_combined_gw3(prob, idx_dict, PSC_DATA, DATA, PSC_DATA50, M_list, A
                          for l in [PSC_DATA[idx][p]['probs'] for p in range(0, 1 + p_max)]])
         mean_data = np.mean(data, axis=0)
         std_dev_data = np.std(data, axis=0)
-        line, = ax.plot(range(0, p_max + 1), mean_data, marker=markers[marker_idx % len(markers)], label='Qubo Relaxed (10 Initializations)')
+        line, = ax.plot(range(0, p_max + 1), mean_data, marker=markers[marker_idx % len(markers)], label='QUBO Relaxed (10 Initializations)')
         ax.fill_between(range(0, p_max + 1), 
                         (mean_data - std * std_dev_data), 
                         (mean_data + std * std_dev_data), 
@@ -753,7 +753,7 @@ def get_depth_combined_gw3(prob, idx_dict, PSC_DATA, DATA, PSC_DATA50, M_list, A
                             for l in [PSC_DATA50[idx][p]['probs'] for p in range(0, 1 + p_max)]])
         mean_data_50 = np.mean(data_50, axis=0)
         std_dev_data_50 = np.std(data_50, axis=0)
-        line, = ax.plot(range(0, p_max + 1), mean_data_50, marker=markers[marker_idx % len(markers)], label='Qubo Relaxed (50 Initializations)', color='goldenrod')
+        line, = ax.plot(range(0, p_max + 1), mean_data_50, marker=markers[marker_idx % len(markers)], label='QUBO Relaxed (50 Initializations)', color='goldenrod')
         ax.fill_between(range(0, p_max + 1), 
                         (mean_data_50 - std * std_dev_data_50), 
                         (mean_data_50 + std * std_dev_data_50),
@@ -816,15 +816,15 @@ def get_depth_combined_gw3(prob, idx_dict, PSC_DATA, DATA, PSC_DATA50, M_list, A
         ax.set_xticklabels(range(p_max + 1))  # Set x-axis labels
     
     # Set y-axis label only for the leftmost plot in each row
-    axs[0].set_ylabel(r'$\mathcal{P}$', fontsize=25, labelpad=10)
-    axs[1].set_ylabel(r'$\alpha$', fontsize=25, labelpad=10)  # Change 'a' to Greek alpha (α) in the y-axis label
+    axs[0].set_ylabel(r'$\mathcal{P}$', fontsize=35, labelpad=10)
+    axs[1].set_ylabel(r'$\alpha$', fontsize=35, labelpad=10)  # Change 'a' to Greek alpha (α) in the y-axis label
     
     # Set labels for x-axis
-    axs[1].set_xlabel('p', fontsize=25)
+    axs[1].set_xlabel('p', fontsize=35)
 
     # # Add combined legend below both subplots
     handles, labels = axs[0].get_legend_handles_labels()
-    fig.legend(handles, labels, loc='lower center', ncol=6, bbox_to_anchor=(0.5, .07), fontsize=12, frameon=True)
+    # fig.legend(handles, labels, loc='lower center', ncol=6, bbox_to_anchor=(0.5, .07), fontsize=12, frameon=True)
 
     # Adjust spacing to prevent overlap with the legend
     plt.subplots_adjust(bottom=0.2)
