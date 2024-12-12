@@ -684,7 +684,7 @@ def get_depth_combined(prob, idx_dict, PSC_DATA, DATA, PSC_DATA50, M_list, A_lis
     
     plt.show()
 
-def get_depth_combined_gw3(prob, idx_dict, PSC_DATA, DATA, PSC_DATA50, M_list, A_list, path=None, p_max=5, std=.25):
+def get_depth_combined_gw2(prob, idx_dict, PSC_DATA, DATA, PSC_DATA50, M_list, A_list, path=None, p_max=5, std=.25):
     fig, axs = plt.subplots(2, 1, figsize=(18, 16), sharex=True)  # Create 2 subplots for depth and cost
 
     plt.subplots_adjust(wspace=0, hspace=0.1, bottom = .5)  # Adjust spacing between plots
@@ -799,15 +799,15 @@ def get_depth_combined_gw3(prob, idx_dict, PSC_DATA, DATA, PSC_DATA50, M_list, A
         
         if ws_list[0] is not None:
             for r in ws_data.keys():
-                compute_and_plot(ws_data[r], f'GW3 {r}', axs[1])  # Cost plot for GW3
+                compute_and_plot(ws_data[r], f'GW2 {r}', axs[1])  # Cost plot for GW2
                 marker_idx += 1  # Increment marker index
     
         compute_and_plot(psc_data, 'Qubo Relaxed (10 Initializations)', axs[1])
         compute_and_plot(psc_data50, 'Qubo Relaxed (50 Initializations)', axs[1], color='goldenrod')
     
-    # Plot the depth and cost graphs for 'GW3'
-    plot_depth([None, 'GW3'], axs[0])  # Depth plot for GW3
-    plot_cost(['GW3'], axs[1])  # Cost plot for GW3
+    # Plot the depth and cost graphs for 'GW2'
+    plot_depth([None, 'GW2'], axs[0])  # Depth plot for GW2
+    plot_cost(['GW2'], axs[1])  # Cost plot for GW2
     
     # Ensure the x-axis line is visible and adjust x-axis ticks
     for ax in axs.flat:
@@ -840,6 +840,7 @@ def get_depth_combined_gw3(prob, idx_dict, PSC_DATA, DATA, PSC_DATA50, M_list, A
 
 
 
+
 def plot_distance(prob, DATA1, DATA2, prob1="10 Initializations", prob2="50 Initializations", path=None):
     fig, ax = plt.subplots(figsize=(10, 6))
     fig.suptitle(prob, fontsize=16)
@@ -859,3 +860,195 @@ def plot_distance(prob, DATA1, DATA2, prob1="10 Initializations", prob2="50 Init
     plt.tight_layout(rect=[0, 0.03, 1, 0.999])
     plt.show()
 
+def calculate_depth_points_gw3(prob, idx_dict, PSC_DATA, DATA, PSC_DATA50, M_list, A_list, p_max=5):
+    ws_list = ['BM2','BM3','GW2','GW3', None]
+    results = {
+        "None": {"p": [], "alpha": []},
+        "Warmstart No Rotation": {"p": [], "alpha": []},
+        "Warmstart First Rotation": {"p": [], "alpha": []},
+        "Warmstart Last Rotation": {"p": [], "alpha": []},
+        "QUBO Relaxed (10 Initializations)": {"p": [], "alpha": []},
+        "QUBO Relaxed (50 Initializations)": {"p": [], "alpha": []},
+    }
+
+    for idx in range(*idx_dict[prob]):
+        M = M_list[idx]
+        A = A_list[idx]
+        m = -brute_force_maxcut(-A)[-1]
+
+        # Calculate for None
+        for ws in ws_list:
+            if ws is None:
+                none_p = [np.max(DATA[idx][p][None]['probs']) for p in range(0, 1 + p_max)]
+                none_alpha = [(np.max(DATA[idx][p][None]['cost']) - m) / (M - m) for p in range(0, 1 + p_max)]
+                results["None"]["p"].append(none_p)
+                results["None"]["alpha"].append(none_alpha)
+
+        # Calculate for Warmstart variants
+            else:
+                for r, label in zip([None, 0, -1], ["Warmstart No Rotation", "Warmstart First Rotation", "Warmstart Last Rotation"]):
+                    ws_p = [np.max(DATA[idx][p]['GW3'][r]['probs']) for p in range(0, 1 + p_max)]
+                    ws_alpha = [(np.max(DATA[idx][p]['GW3'][r]['cost']) - m) / (M - m) for p in range(0, 1 + p_max)]
+                    results[label]["p"].append(ws_p)
+                    results[label]["alpha"].append(ws_alpha)
+
+        # Calculate for QUBO Relaxed (10 Initializations)
+        qubo10_p = [np.max(PSC_DATA[idx][p]['probs']) for p in range(0, 1 + p_max)]
+        qubo10_alpha = [(np.max(PSC_DATA[idx][p]['cost']) - m - np.sum(-A[:-1, :-1]) / 4) / (M - m)
+                        for p in range(0, 1 + p_max)]
+        results["QUBO Relaxed (10 Initializations)"]["p"].append(qubo10_p)
+        results["QUBO Relaxed (10 Initializations)"]["alpha"].append(qubo10_alpha)
+
+        # Calculate for QUBO Relaxed (50 Initializations)
+        qubo50_p = [np.max(PSC_DATA50[idx][p]['probs']) for p in range(0, 1 + p_max)]
+        qubo50_alpha = [(np.max(PSC_DATA50[idx][p]['cost']) - m - np.sum(-A[:-1, :-1]) / 4) / (M - m)
+                        for p in range(0, 1 + p_max)]
+        results["QUBO Relaxed (50 Initializations)"]["p"].append(qubo50_p)
+        results["QUBO Relaxed (50 Initializations)"]["alpha"].append(qubo50_alpha)
+
+    # Format output: Averaging results for clarity (optional)
+    formatted_results = {}
+    for key, value in results.items():
+        formatted_results[key] = {
+            "p": [round(np.mean([run[i] for run in value["p"]]), 4) for i in range(p_max + 1)],
+            "alpha": [round(np.mean([run[i] for run in value["alpha"]]), 4) for i in range(p_max + 1)],
+        }
+
+    return formatted_results
+
+
+def calculate_depth_points_gw2(prob, idx_dict, PSC_DATA, DATA, PSC_DATA50, M_list, A_list, p_max=5, custom_std_scale=0.25):
+    ws_list = ['BM2', 'BM3', 'GW2', 'GW3', None]
+    results = {
+        "None": {"p": [], "a": [], "p_std": [], "a_std": []},
+        "Warmstart No Rotation": {"p": [], "a": [], "p_std": [], "a_std": []},
+        "Warmstart First Rotation": {"p": [], "a": [], "p_std": [], "a_std": []},
+        "Warmstart Last Rotation": {"p": [], "a": [], "p_std": [], "a_std": []},
+        "QUBO Relaxed (10 Initializations)": {"p": [], "a": [], "p_std": [], "a_std": []},
+        "QUBO Relaxed (50 Initializations)": {"p": [], "a": [], "p_std": [], "a_std": []},
+    }
+
+    for idx in range(*idx_dict[prob]):
+        M = M_list[idx]
+        A = A_list[idx]
+        m = -brute_force_maxcut(-A)[-1]
+
+        # Calculate for None
+        for ws in ws_list:
+            if ws is None:
+                none_p = [np.max(DATA[idx][p][None]['probs']) for p in range(0, 1 + p_max)]
+                none_a = [(np.max(DATA[idx][p][None]['cost']) - m) / (M - m) for p in range(0, 1 + p_max)]
+                results["None"]["p"].append(none_p)
+                results["None"]["a"].append(none_a)
+
+        # Calculate for Warmstart variants
+            else:
+                for r, label in zip([None, 0, -1], ["Warmstart No Rotation", "Warmstart First Rotation", "Warmstart Last Rotation"]):
+                    ws_p = [np.max(DATA[idx][p]['GW2'][r]['probs']) for p in range(0, 1 + p_max)]
+                    ws_a = [(np.max(DATA[idx][p]['GW2'][r]['cost']) - m) / (M - m) for p in range(0, 1 + p_max)]
+                    results[label]["p"].append(ws_p)
+                    results[label]["a"].append(ws_a)
+
+        # Calculate for QUBO Relaxed (10 Initializations)
+        qubo10_p = [np.max(PSC_DATA[idx][p]['probs']) for p in range(0, 1 + p_max)]
+        qubo10_a = [(np.max(PSC_DATA[idx][p]['cost']) - m - np.sum(-A[:-1, :-1]) / 4) / (M - m)
+                    for p in range(0, 1 + p_max)]
+        results["QUBO Relaxed (10 Initializations)"]["p"].append(qubo10_p)
+        results["QUBO Relaxed (10 Initializations)"]["a"].append(qubo10_a)
+
+        # Calculate for QUBO Relaxed (50 Initializations)
+        qubo50_p = [np.max(PSC_DATA50[idx][p]['probs']) for p in range(0, 1 + p_max)]
+        qubo50_a = [(np.max(PSC_DATA50[idx][p]['cost']) - m - np.sum(-A[:-1, :-1]) / 4) / (M - m)
+                    for p in range(0, 1 + p_max)]
+        results["QUBO Relaxed (50 Initializations)"]["p"].append(qubo50_p)
+        results["QUBO Relaxed (50 Initializations)"]["a"].append(qubo50_a)
+
+    # Format output: Averaging results and adding scaled standard deviations
+    formatted_results = {}
+    for key, value in results.items():
+        formatted_results[key] = {
+            "p": [round(np.mean([run[i] for run in value["p"]]), 4) for i in range(p_max + 1)],
+            "a": [round(np.mean([run[i] for run in value["a"]]), 4) for i in range(p_max + 1)],
+            "p_std": [round(custom_std_scale * np.std([run[i] for run in value["p"]]), 4) for i in range(p_max + 1)],
+            "a_std": [round(custom_std_scale * np.std([run[i] for run in value["a"]]), 4) for i in range(p_max + 1)],
+        }
+
+    return formatted_results
+
+
+def format_dictionary(data):
+    formatted_output = ""
+    for key, values in data.items():
+        # Add the main type with a line break
+        formatted_output += f"{key}:\n"
+        for section, section_values in values.items():
+            # Add the section name and its values with a line break
+            formatted_output += f"  {section}: {section_values}\n"
+        # Add an extra line break after each type
+        formatted_output += "\n"
+    return formatted_output
+
+def plot_numbers(prob, dict):
+    
+    def warmstart_table(prob, dict):
+        print(f"                     {prob} ")
+        print(f"{'Warmstart Values':<35} {'p':<10} {'a':<10}")
+        print("-" * 55)
+        
+        for warmstart, values in dict.items():
+            p = values["p"][-1]
+            a = values["a"][-1]
+            print(f"{warmstart:<35} {p:<10} {a:<10}")
+
+    print("-" *55)
+    warmstart_table(prob, dict)
+
+    def warmstarts_std(dict):
+        # Extract the last value and its std for `p` and `a` for each warmstart
+        last_values = {}
+        for warmstart, values in dict.items():
+            last_values[warmstart] = {
+                'p': values['p'][-1], 'p_std': values['p_std'][-1],
+                'a': values['a'][-1], 'a_std': values['a_std'][-1]
+            }
+    
+        # Sort warmstarts by largest last value of `p` or `a`
+        sorted_p = sorted(last_values.items(), key=lambda x: x[1]['p'], reverse=True)
+        sorted_a = sorted(last_values.items(), key=lambda x: x[1]['a'], reverse=True)
+    
+        # Function to find other warmstarts within STD for a specific warmstart
+        def find_within_std(sorted_list, key, std_key):
+            results = {}
+            for current_name, current_dict in sorted_list:
+                within_std = []
+                for other_name, other_dict in sorted_list:
+                    if current_name != other_name:
+                        is_within = abs(current_dict[key] - other_dict[key]) <= (
+                            current_dict[std_key] + other_dict[std_key]
+                        )
+                        if is_within:
+                            within_std.append(other_name)
+                results[current_name] = within_std
+            return results
+    
+        # Create lists of warmstarts within STD for `p` and `a`
+        p_within_std = find_within_std(sorted_p, 'p', 'p_std')
+        a_within_std = find_within_std(sorted_a, 'a', 'a_std')
+    
+        print("-" *55)
+        print("Greatest-Least, + standard deviatons\n")
+    
+        # Print results for `a`
+        print("Warmstarts for p (greatest to least):")
+        for idx, (warmstart, _) in enumerate(sorted_p, start=1):
+            within_std_list = ' '.join(p_within_std[warmstart]) or '0'
+            print(f"{idx}. {warmstart}: {within_std_list}")
+        
+        # Print results for `a`
+        print("\nWarmstarts for a (greatest to least):")
+        for idx, (warmstart, _) in enumerate(sorted_a, start=1):
+            within_std_list = ' '.join(a_within_std[warmstart]) or '0'
+            print(f"{idx}. {warmstart}: {within_std_list}")
+
+    warmstarts_std(dict)
+ 
