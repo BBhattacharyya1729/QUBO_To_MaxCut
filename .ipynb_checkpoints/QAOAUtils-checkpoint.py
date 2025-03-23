@@ -12,9 +12,30 @@ from tqdm.notebook import tqdm
 Hamiltonian from adjacency matrix A
 """
 def indexedZ(i,n):
+    """
+    
+
+    Parameters:
+        i (): 
+        n ():
+
+    Returns:
+        
+    """
+    
     return SparsePauliOp("I" * (n-i-1) + "Z" + "I" * i)
 
 def getHamiltonian(A):
+    """
+    
+
+    Parameters:
+        A ():
+
+    Returns:
+        
+    """
+    
     n = len(A)
     H = 0 * SparsePauliOp("I" * n)
     for i in range(n):
@@ -25,9 +46,34 @@ def getHamiltonian(A):
 """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 
 def SU2_op(x,y,z,t):
+    """
+    
+
+    Parameters:
+        x ():
+        y ():
+        z ():
+        t ():
+
+    Returns:
+        np.ndarray:
+    """
+    
     return np.array([[np.cos(t)-1j * np.sin(t)*z, -np.sin(t) * (y+1j * x)],[ -np.sin(t) * (-y+1j * x),np.cos(t)+1j * np.sin(t)*z]])
 
 def apply_single_qubit_op(psi,U,q):
+    """
+    
+
+    Parameters:
+        psi ():
+        U ():
+        q ():
+
+    Returns:
+        np.ndarray:
+    """
+    
     n=int(np.log2(len(psi)))
     axes = [q] + [i for i in range(n) if i != q]
     contract_shape = (2, len(psi)// 2)
@@ -43,17 +89,64 @@ def apply_single_qubit_op(psi,U,q):
     return np.reshape(np.transpose(tensor, np.argsort(axes)),len(psi))
 
 def pre_compute(A):
+    """
+    
+
+    Parameters:
+        A ():
+
+    Returns:
+        np.ndarray: 
+    """
+    
     return np.array(scipy.sparse.csr_matrix.diagonal(getHamiltonian(np.flip(A)).to_matrix(sparse=True))).real
 
 def apply_mixer(psi,U_ops):
+    """
+    
+
+    Parameters:
+        psi ():
+        U ():
+        q ():
+
+    Returns:
+        psi (): 
+    """
+    
     for n in range(0,len(U_ops)):
         psi = apply_single_qubit_op(psi, U_ops[n], n)
     return psi
 
 def cost_layer(precomp,psi,t):
+    """
+    
+
+    Parameters:
+        precomp ():
+        psi ():
+        t ():
+
+    Returns:
+        
+    """
+    
     return np.exp(-1j * precomp*t) * psi
 
 def QAOA_eval(precomp,params,mixer_ops=None,init=None):
+    """"
+
+
+    Parameters:
+        precomp ():
+        params ():
+        mixer_ops ():
+        init ():
+
+    Returns:
+        psi ():
+    """
+    
     p = len(params)//2
     gammas = params[p:]
     betas = params[:p]
@@ -75,21 +168,72 @@ def QAOA_eval(precomp,params,mixer_ops=None,init=None):
     return psi
 
 def expval(precomp,psi):
+    """"
+
+
+    Parameters:
+        precomp ():
+        psi ():
+
+    Returns:
+        
+    """
+    
     return np.sum(psi.conjugate() * precomp * psi).real
 
 def Q2_data(theta_list,rotation=None):
+    """"
+
+
+    Parameters:
+        theta_list ():
+        rotation ():
+
+    Returns:
+        tuple:
+            init ():
+            mixer_ops ():
+    """
+    
     angles = vertex_on_top(theta_list,rotation)
     init = reduce(lambda a,b: np.kron(a,b), [np.array([np.cos(v/2), np.exp(-1j/2 * np.pi)*np.sin(v/2)],dtype='complex128') for v in angles])
     mixer_ops = lambda t: [  SU2_op(0,-np.sin(v),np.cos(v),t) for v in angles]
     return init,mixer_ops
 
 def Q3_data(theta_list,rotation=None,z_rot=None):
+    """"
+
+
+    Parameters:
+        theta_list ():
+        rotation ():
+        z_rot ():
+
+    Returns:
+        tuple:
+            init ():
+            mixer_ops ():
+    """
     angles = vertex_on_top(theta_list,rotation,z_rot=z_rot)
     init = reduce(lambda a,b: np.kron(a,b), [np.array([np.cos(v[0]/2), np.exp(1j * v[1])*np.sin(v[0]/2)],dtype='complex128') for v in angles])
     mixer_ops = lambda t:  [SU2_op(np.sin(v[0])*np.cos(v[1]),np.sin(v[0])*np.sin(v[1]),np.cos(v[0]),t) for v in angles]
     return init,mixer_ops
 
 def single_circuit_optimization_eff(precomp,opt,mixer_ops,init,p,param_guess=None):
+    """"
+
+
+    Parameters:
+        precomp ():
+        opt ():
+        mixer_ops ():
+        init ():
+        p ():
+        param_guess ():
+
+    Returns:
+        
+    """
 
     history = {"cost": [], "params": []} if param_guess is None else {"cost": [expval(precomp,QAOA_eval(precomp,param_guess,mixer_ops=mixer_ops,init=init))], "params": [param_guess]}
     def compute_expectation(x):
@@ -105,6 +249,24 @@ def single_circuit_optimization_eff(precomp,opt,mixer_ops,init,p,param_guess=Non
     return np.max(history["cost"]),history["params"][np.argmax(history["cost"])],history
 
 def circuit_optimization_eff(precomp,opt,mixer_ops,init,p,reps=10,name=None,verbose=False,param_guesses=None):
+    """"
+
+
+    Parameters:
+        precomp ():
+        opt ():
+        mixer_ops ():
+        init ():
+        p ():
+        reps ():
+        name ():
+        verbose ():
+        param_gueses ():
+
+    Returns:
+        np.ndarray: 
+    """
+    
     if(verbose):
         if(name is None):
             print(f"------------Beginning Optimization------------")
@@ -128,6 +290,17 @@ def circuit_optimization_eff(precomp,opt,mixer_ops,init,p,reps=10,name=None,verb
     return np.array(cost_list),np.array(param_list),history_list
 
 def initialize(A,BM_kwargs={"iters":100, "reps":50, "eta":0.05},GW_kwargs={"reps":50}):
+    """"
+
+
+    Parameters:
+        A (np.ndarray):
+        BM_kwargs (dict):
+
+    Returns:
+    
+    """
+    
     precomp = pre_compute(A)
     _,BM2_theta_list,_=solve_BM2(A,**BM_kwargs)
     _,BM3_theta_list,_=solve_BM3(A,**BM_kwargs)
@@ -138,6 +311,27 @@ def initialize(A,BM_kwargs={"iters":100, "reps":50, "eta":0.05},GW_kwargs={"reps
     return [precomp,BM2_theta_list,BM3_theta_list,GW2_theta_list,GW3_theta_list,v,M]
 
 def warmstart_comp(A,opt,p_max=5,rotation_options=[None,0,-1],BM_kwargs={"iters":100, "reps":50, "eta":0.05},GW_kwargs={"reps":50},reps=10,optimizer_kwargs={'name':None,'verbose':True},ws_list=['BM2','BM3','GW2','GW3',None],initial_data=None,keep_hist=False):
+    """"
+
+
+    Parameters:
+        A (np.ndarray):
+        opt ():
+        p_max ():
+        rotation_options ():
+        BM_kwargs (dict)
+        GW_kwargs (dict):
+        reps (int):
+        optimizer_kwargs (dict):
+        ws_list (list):
+        initial_data ():
+        keep_hist (bool):
+
+    Returns:
+        tuple:
+            qc_data (): 
+            opt_data ():
+    """
     ###initialization
     if(initial_data is None):
         precomp = pre_compute(A)
@@ -206,6 +400,17 @@ def warmstart_comp(A,opt,p_max=5,rotation_options=[None,0,-1],BM_kwargs={"iters"
 
 
 def brute_force_maxcut(A,precomp=None):
+    """
+
+
+    Parameters:
+        A (np.ndarray):
+        precomp ():
+
+    Returns:
+        np.ndarray: 
+    """
+    
     if(precomp is None):
         precomp  = pre_compute(A)
     b_list = np.argwhere(abs(precomp - np.amax(precomp))<1e-10)
@@ -214,11 +419,41 @@ def brute_force_maxcut(A,precomp=None):
     return np.array([2*np.array([int(i) for i in '0'*(len(A)-len(b))+b])-1 for b in b_list]),np.max(precomp)
 
 def opt_sampling_prob(v,precomp,params,mixer_ops=None,init=None):
+    """
+
+
+    Parameters:
+        v ():
+        precomp ():
+        params ():
+        mixer_ops ():
+        init ():
+
+    Returns:
+    
+    """
     psi = QAOA_eval(precomp,params,mixer_ops,init)
     return np.sum(abs(psi[[np.sum([2**i * v for i,v in enumerate(l[::-1])]) for l in ((v+1)//2)]])**2)
 
 ###Depth 0 Test
 def depth0_ws_comp(n,A_func,ws_list = ['BM2','BM3','GW2','GW3'],rotation_options = None,count=1000):
+    """
+
+
+    Parameters:
+        n ():
+        A_func ():
+        ws_list (list):
+        rotation_options ():
+        count (int):
+
+    Returns:
+        tuple:
+            comparison_data (): 
+            best_angle_data ():
+            ws_data ():
+            A_list ():
+    """
     if(rotation_options is None):
         rotation_options = list(range(n))+[None]
     best_angle_data = {ws: {'max_cost':[],'max_probs':[]}  for ws in ws_list}

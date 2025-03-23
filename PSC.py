@@ -1,6 +1,17 @@
 from QAOAUtils import *
 import scipy
+
 def relax_solve(Q,reps=10):
+    """
+    Solves QUBO problem using continous relaxation.
+    
+    Parameters:
+        Q (np.ndarray): The QUBO matrix.
+        reps (int): The number of optimization attempts.
+
+    Returns:
+        np.ndarray: The best solution.
+    """
     x = []
     f = []
     for i in range(reps):
@@ -10,6 +21,17 @@ def relax_solve(Q,reps=10):
     return x[np.argmax(f)]
 
 def PO_solve(mu,sigma,B=None):
+    """
+    Solves the portfolio optimization problem.
+
+    Parameters:
+        mu (np.ndarray): The expected return of each asset.
+        sigma (np.ndarray): The covariance matrix of asset returns.
+        B (int): The number of assets to select (default is half).
+
+    Returns:
+        np.ndarray: The optimal portfolio weights for each asset.
+    """
     if(B is None):
         B=len(mu)//2
     x = cp.Variable(len(mu))
@@ -21,6 +43,19 @@ def PO_solve(mu,sigma,B=None):
     return x.value
 
 def PSC_data(vals,eps=0.1):
+    """
+    
+
+    Parameters:
+        vals (list): A list of rotation angles.
+        eps (float):
+
+    Returns:
+        tuple:
+            init (): 
+            mixer_ops ():
+        
+    """
     thetas = []
     for v in vals:
         if(v <= eps):
