@@ -1,5 +1,5 @@
-# QUBO_To_Ising
-Code for QUBO -> Ising Paper
+# QUBO To Max-Cut
+Code for QUBO -> Max-Cut Paper
 
 ### Utility Files
 * **oputils.py**: Code for algebra with binary variables. Handles generation of QUBO problem instances
