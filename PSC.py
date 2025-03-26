@@ -44,16 +44,16 @@ def PO_solve(mu,sigma,B=None):
 
 def PSC_data(vals,eps=0.1):
     """
-    
+    Gets the warmstart data from a PSC warmstart
 
     Parameters:
-        vals (list): A list of rotation angles.
-        eps (float):
+        vals (list): The continous relaxation parameters
+        eps (float): The distance from the edges of hypercube. Defaults to 0.1
 
     Returns:
         tuple:
-            init (): 
-            mixer_ops ():
+            init (np.ndarray): The initial statevector 
+            mixer_ops (list[np.ndarray]): The mixer operators
         
     """
     thetas = []
@@ -69,6 +69,16 @@ def PSC_data(vals,eps=0.1):
     return init,mixer_ops
 
 def PSCHamiltonian(Q):
+    """
+    Gets a Hamiltonian from a 01 - QUBO
+    
+    Parameters:
+        Q (np.ndarray): The QUBO matrix.
+
+    Returns:
+        H (SparsePauliOp): The obtained Hamiltonian 
+        
+    """
     n = len(Q)
     H = np.sum(Q) * SparsePauliOp("I" * n)/4
     for i in range(n):
@@ -78,15 +88,55 @@ def PSCHamiltonian(Q):
     return H.simplify()
 
 def PSC_pre_compute(Q):
+    """
+    Gets the diagonal elements of a Hamiltonian from a 01-QUBO
+    
+    Parameters:
+        Q (np.ndarray): The QUBO matrix.
+
+    Returns:
+        np.ndarray: The obtained Hamiltonian's diagonal elements 
+        
+    """
     return np.array(scipy.sparse.csr_matrix.diagonal(PSCHamiltonian(np.flip(Q)).to_matrix(sparse=True))).real
 
 
 def PSC_opt_sampling_prob(v,precomp,params,mixer_ops=None,init=None):
+    """
+    Finds the optimal sampling probability for a QAOA circuit an optimal state
+    
+    Parameters:
+        v (np.ndarray): Optimal bitstring
+        precomp (np.ndarray): Hamiltonian diagonal
+        params (np.ndarray): QAOA circuit parameters
+        mixer_ops (list[np.ndarray]): List of mixer operators. Defaults to none
+        init (np.ndarray): Circuit initial state. Defaults to None
+    
+    returns
+        float: The computed optimal sampling probability
+    """
     psi = QAOA_eval(precomp,params,mixer_ops,init)
     return np.sum(abs(psi[[np.sum([2**i * v for i,v in enumerate(l[::-1])]) for l in [map_reduce(_) for _ in v]]])**2)/2
 
 
 def PSC_Run(A,opt,p_max,optimizer_kwargs={'name':None,'verbose':False},keep_hist=False,eps=0.1,reps=10,PO_data=None,relaxed_reps=10):
+    """
+    Runs a QAOA optimization with PSC warmstart
+    
+    Parameters:
+        A (np.ndarray): adjacency matrix 
+        opt (Qiskit.algorithms.optimizers): Optimizer
+        p_max (int): Maximum depth, we optimize circuits with depth 1...p_max
+        optimizer_kwargs (dict): Kwargs for optimizer
+        keep_hist (bool): Whether to store history. Defaults to false
+        eps (float): PSC eps. Defaults to 0.1
+        reps (int): Number of optimizations
+        PO_data (dict): Dictionary of portfolio opt data is problem is PO opt
+        relaxed_reps: Number of optimizations for relaxed solver
+    
+    returns
+        opt_data (dict): Optimization data dictionary 
+    """
     ###initialization
     Q = -A[:-1,:-1]
     precomp = PSC_pre_compute(Q)
@@ -122,220 +172,8 @@ def PSC_Run(A,opt,p_max,optimizer_kwargs={'name':None,'verbose':False},keep_hist
     return opt_data
 
 
-# def get_PSC_depth_cost_comp(prob,idx_dict,DATA,M_list,A_list,path=None,p_max=5):
-#     fig = plt.figure(figsize=(10,10))
-    
-#     mean_data = np.zeros(p_max+1)
-#     for idx in range(*idx_dict[prob]):
-#         M = M_list[idx]
-#         A = A_list[idx]
-#         mean_data+=np.array([abs(np.max(l)-(M+np.sum(-A_list[:-1,:-1])/4))/(M+np.sum(-A_list[:-1,:-1])/4) for l in [DATA[idx][p][ws]['cost'] for p in range(0,1+p_max)]])
-#     plt.plot(range(0,p_max+1),np.log10(mean_data/(idx_dict[prob][1]-idx_dict[prob][0])),label=str(ws)+" ")
-        
-#     plt.title(prob)
-#     plt.xlabel('p')
-#     plt.ylabel('Log Relative Error')
-#     plt.legend()
-#     if(path is not None):
-#         plt.savefig(path+".pdf",dpi=300)
-#     plt.show()
 
-
-# def get_depth_cost_comp(prob,idx_dict,PSC_DATA,DATA,M_list,A_list,ws_list=[None, 'GW2','GW3'],path=None,p_max=5):
-#     fig = plt.figure(figsize=(10,10))
-#     for ws in ws_list:
-#         if(ws is None):
-#             mean_data = np.zeros(p_max+1)
-#             for idx in range(*idx_dict[prob]):
-#                 M = M_list[idx]
-#                 A = A_list[idx]
-#                 mean_data+=np.array([abs(np.max(l)-M)/(M+np.sum(-A[:-1,:-1])/4) for l in [DATA[idx][p][ws]['cost'] for p in range(0,1+p_max)]])
-#             plt.plot(range(0,p_max+1),np.log10(mean_data/(idx_dict[prob][1]-idx_dict[prob][0])),label=str(ws)+" ")
-#         else:
-#             for r in [0,-1,None]:
-#                 mean_data = np.zeros(p_max+1)
-#                 for idx in range(*idx_dict[prob]):
-#                     M = M_list[idx]
-#                     A = A_list[idx]
-#                     mean_data+=np.array([abs(np.max(l)-M)/(M+np.sum(-A[:-1,:-1])/4) for l in [DATA[idx][p][ws][r]['cost'] for p in range(0,1+p_max)]])
-#                 plt.plot(range(0,p_max+1),np.log10(mean_data/(idx_dict[prob][1]-idx_dict[prob][0])),label=str(ws)+" "+str(r))
-#     for idx in range(*idx_dict[prob]):
-#         M = M_list[idx]
-#         A = A_list[idx]
-#         mean_data+=np.array([abs(np.max(l)-(M+np.sum(-A[:-1,:-1])/4))/(M+np.sum(-A[:-1,:-1])/4) for l in [PSC_DATA[idx][p]['cost'] for p in range(0,1+p_max)]])
-#     plt.plot(range(0,p_max+1),np.log10(mean_data/(idx_dict[prob][1]-idx_dict[prob][0])), label = 'PSC')
-       
-#     plt.title(prob)
-#     plt.xlabel('p')
-#     plt.ylabel('Log Relative Error')
-#     plt.legend()
-#     if(path is not None):
-#         plt.savefig(path+".pdf",dpi=300)
-#     plt.show()
-
-
-# def get_depth_prob_comp(prob,idx_dict,PSC_DATA,DATA,M_list,A_list,ws_list=[None, 'GW2','GW3'],path=None,p_max=5):
-#     fig = plt.figure(figsize=(10,10))
-#     for ws in ws_list:
-#         if(ws is None):
-#             mean_data = np.zeros(p_max+1)
-#             for idx in range(*idx_dict[prob]):
-#                 M = M_list[idx]
-#                 mean_data+=np.array([abs(np.max(l)) for l in [DATA[idx][p][ws]['probs'] for p in range(0,1+p_max)]])
-#             plt.plot(range(0,p_max+1),np.log10(1-mean_data/(idx_dict[prob][1]-idx_dict[prob][0])),label=str(ws)+" ")
-#         else:
-#             for r in [0,-1,None]:
-#                 mean_data = np.zeros(p_max+1)
-#                 for idx in range(*idx_dict[prob]):
-#                     M = M_list[idx]
-#                     mean_data+=np.array([abs(np.max(l)) for l in [DATA[idx][p][ws][r]['probs'] for p in range(0,1+p_max)]])
-#                 plt.plot(range(0,p_max+1),np.log10(1-mean_data/(idx_dict[prob][1]-idx_dict[prob][0])),label=str(ws)+" "+str(r))
-#     for idx in range(*idx_dict[prob]):
-#         M = M_list[idx]
-#         A = A_list[idx]
-#         mean_data+=np.array([abs(np.max(l)) for l in [PSC_DATA[idx][p]['probs'] for p in range(0,1+p_max)]])
-#     plt.plot(range(0,p_max+1),np.log10(1-mean_data/(idx_dict[prob][1]-idx_dict[prob][0])),label="PSC")
-#     plt.title(prob)
-#     plt.xlabel('p (Depth)')
-#     plt.ylabel('Probabilty')
-#     plt.legend()
-#     if(path is not None):
-#         plt.savefig(path+".pdf",dpi=300)
-#     plt.show()
-
-
-
-# def get_PSC_depth_cost_comp(prob,idx_dict,DATA,M_list,A_list,path=None,p_max=5):
-#     fig = plt.figure(figsize=(10,10))
-    
-#     mean_data = np.zeros(p_max+1)
-     
-#     plt.title(prob)
-#     plt.xlabel('p')
-#     plt.ylabel('Log Relative Error')
-#     plt.legend()
-#     if(path is not None):
-#         plt.savefig(path+".pdf",dpi=300)
-#     plt.show()
-
-
-# def get_PSC_depth_prob_comp(prob,idx_dict,DATA,M_list,A_list,path=None,p_max=5):
-#     fig = plt.figure(figsize=(10,10))
-    
-#     mean_data = np.zeros(p_max+1)
-#     for idx in range(*idx_dict[prob]):
-#         M = M_list[idx]
-#         A = A_list[idx]
-#         mean_data+=np.array([abs(np.max(l)) for l in [DATA[idx][p]['probs'] for p in range(0,1+p_max)]])
-#     plt.plot(range(0,p_max+1),np.log10(1-mean_data/(idx_dict[prob][1]-idx_dict[prob][0])),label="PSC")
-        
-#     plt.title(prob)
-#     plt.xlabel('p')
-#     plt.ylabel('1 - log prob')
-#     plt.legend()
-#     if(path is not None):
-#         plt.savefig(path+".pdf",dpi=300)
-#     plt.show()
-
-# def get_PSC_depth_prob_comp(prob,idx_dict,DATA,M_list,A_list,path=None,p_max=5):
-#     fig = plt.figure(figsize=(10,10))
-    
-#     mean_data = np.zeros(p_max+1)
-       
-#     plt.title(prob)
-#     plt.xlabel('p')
-#     plt.ylabel('1 - log prob')
-#     plt.legend()
-#     if(path is not None):
-#         plt.savefig(path+".pdf",dpi=300)
-#     plt.show()
-
-
-
-
-
-
-
-
-
-
-
-
-
-# def get_depth_cost_comp(prob, idx_dict, PSC_DATA, DATA, M_list, A_list, ws_list=[None, 'GW2', 'GW3'], path=None, p_max=5):
-#     fig = plt.figure(figsize=(10,10))
-    
-#     for ws in ws_list:
-#         if ws is None:
-#             data = []
-#             for idx in range(*idx_dict[prob]):
-#                 M = M_list[idx]
-#                 A = A_list[idx]
-#                 data.append([abs(np.max(l)-M)/(M+np.sum(-A[:-1,:-1])/4) for l in [DATA[idx][p][ws]['cost'] for p in range(0, 1+p_max)]])
-#             mean_data = np.mean(data, axis=0)
-#             std_dev_data = np.std(data, axis=0)
-#             plt.plot(range(0, p_max+1), np.log10(mean_data), marker='o', label=str(ws)+" ")
-#             plt.fill_between(range(0, p_max+1), 
-#                              np.log10(mean_data - 0.5 * std_dev_data), 
-#                              np.log10(mean_data + 0.5 * std_dev_data), 
-#                              alpha=0.2)
-#         else:
-#             for r in [0, -1, None]:
-#                 data = []
-#                 for idx in range(*idx_dict[prob]):
-#                     M = M_list[idx]
-#                     A = A_list[idx]
-#                     data.append([abs(np.max(l)-M)/(M+np.sum(-A[:-1,:-1])/4) for l in [DATA[idx][p][ws][r]['cost'] for p in range(0, 1+p_max)]])
-#                 mean_data = np.mean(data, axis=0)
-#                 std_dev_data = np.std(data, axis=0)
-#                 plt.plot(range(0, p_max+1), np.log10(mean_data), marker='o', label=str(ws)+" "+str(r))
-#                 plt.fill_between(range(0, p_max+1), 
-#                                  np.log10(mean_data - 0.5 * std_dev_data), 
-#                                  np.log10(mean_data + 0.5 * std_dev_data), 
-#                                  alpha=0.2)
-    
-#     data = []
-#     for idx in range(*idx_dict[prob]):
-#         M = M_list[idx]
-#         A = A_list[idx]
-#         data.append([abs(np.max(l)-(M+np.sum(-A[:-1,:-1])/4))/(M+np.sum(-A[:-1,:-1])/4) for l in [PSC_DATA[idx][p]['cost'] for p in range(0, 1+p_max)]])
-#     mean_data = np.mean(data, axis=0)
-#     std_dev_data = np.std(data, axis=0)
-#     plt.plot(range(0, p_max+1), np.log10(mean_data), marker='o', label='PSC')
-#     plt.fill_between(range(0, p_max+1), 
-#                      np.log10(mean_data - 0.5 * std_dev_data), 
-#                      np.log10(mean_data + 0.5 * std_dev_data), 
-#                      alpha=0.2)
-    
-#     plt.title(prob)
-#     plt.xlabel('p')
-#     plt.ylabel('Log Relative Error')
-#     plt.legend()
-#     if path is not None:
-#         plt.savefig(path+".pdf", dpi=300)
-#     plt.show()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+'''''''''''''''''''''''''''''''''FINALIZED PLOTS'''''''''''''''''''''''''''''''''''''''''
 def get_depth_cost_comp(prob,idx_dict,PSC_DATA,DATA,M_list,A_list,ws_list=[None, 'GW2','GW3'],path=None,p_max=5):
     fig = plt.figure(figsize=(10,10))
     for ws in ws_list:
