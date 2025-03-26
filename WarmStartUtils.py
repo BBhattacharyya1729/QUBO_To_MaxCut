@@ -413,7 +413,7 @@ def vertex_on_top(theta_list,rotation = None,z_rot=None):
     
 
     Parameters:
-        theta_list (np.ndarray): A 2D array of angles in spherical coordinates.
+        theta_list (np.ndarray): A 2D array of angles in polar (2D) or spherical (3D) coordinates.
         rotation (int): The index of the vertex to move to the top, defaults to None.
         z_rot (float): Angle for an z-axis rotation, defaults to None.
 

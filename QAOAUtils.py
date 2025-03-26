@@ -13,27 +13,27 @@ Hamiltonian from adjacency matrix A
 """
 def indexedZ(i,n):
     """
-    
+    Returns a SparsePauli Op corresponding to a Z operator on a single qubit
 
     Parameters:
-        i (): 
-        n ():
+        i (int): qubit index 
+        n (int): number of qubits
 
     Returns:
-        
+        SparsePauliOp: SparsePauli for single Z operator
     """
     
     return SparsePauliOp("I" * (n-i-1) + "Z" + "I" * i)
 
 def getHamiltonian(A):
     """
-    
+    Gets a Hamiltonian from a max-cut adjacency matrix
 
     Parameters:
-        A ():
+        A (np.ndarray): max-cut adjacency matrix
 
     Returns:
-        
+        SparsePauliOp: Hamiltonian 
     """
     
     n = len(A)
@@ -47,31 +47,31 @@ def getHamiltonian(A):
 
 def SU2_op(x,y,z,t):
     """
-    
+    Get the matrix for a SU2 rotation around an axis 
 
     Parameters:
-        x ():
-        y ():
-        z ():
-        t ():
+        x (float): x-coordinate of rotation axis
+        y (float): y-coordinate of rotation axis
+        z (float): z-coordinate of rotation axis
+        t (float): rotation angle
 
     Returns:
-        np.ndarray:
+        np.ndarray: matrix for the SU2 rotation
     """
     
     return np.array([[np.cos(t)-1j * np.sin(t)*z, -np.sin(t) * (y+1j * x)],[ -np.sin(t) * (-y+1j * x),np.cos(t)+1j * np.sin(t)*z]])
 
 def apply_single_qubit_op(psi,U,q):
     """
-    
+    Efficiently apply a single qubit operator U on qubit q to statevector psi
 
     Parameters:
-        psi ():
-        U ():
-        q ():
+        psi (np.ndarray): Statevector
+        U (np.ndarray): Operator 
+        q (int): qubit index 
 
     Returns:
-        np.ndarray:
+        np.ndarray: New Statevector 
     """
     
     n=int(np.log2(len(psi)))
@@ -90,28 +90,27 @@ def apply_single_qubit_op(psi,U,q):
 
 def pre_compute(A):
     """
-    
+    Pre-compute the diagonal elements of Hamiltonian corresponding to max-cut adjacency matrix
 
     Parameters:
-        A ():
+        A (np.ndarray): adjacency matrix
 
     Returns:
-        np.ndarray: 
+        np.ndarray: Array containing matrix diagonal  
     """
     
     return np.array(scipy.sparse.csr_matrix.diagonal(getHamiltonian(np.flip(A)).to_matrix(sparse=True))).real
 
 def apply_mixer(psi,U_ops):
     """
+    Apply mixer layer to state
     
-
     Parameters:
-        psi ():
-        U ():
-        q ():
+        psi (np.ndarray): Original state vector
+        U_op (list[np.ndarray]): list of mixer operators
 
     Returns:
-        psi (): 
+        psi (np.ndarray): New statevector  
     """
     
     for n in range(0,len(U_ops)):
@@ -120,31 +119,31 @@ def apply_mixer(psi,U_ops):
 
 def cost_layer(precomp,psi,t):
     """
-    
+    Given a precomputed Hamiltonian diagonal, apply the cost layer
 
     Parameters:
-        precomp ():
-        psi ():
-        t ():
+        precomp (np.ndarray): Precompute diagonal
+        psi (np.ndarray): Statevector
+        t (float): Rotation angle
 
     Returns:
-        
+        np.ndarray: New statevector
     """
     
     return np.exp(-1j * precomp*t) * psi
 
 def QAOA_eval(precomp,params,mixer_ops=None,init=None):
     """"
-
+    Returns statevector after applying QAOA circuit
 
     Parameters:
-        precomp ():
-        params ():
-        mixer_ops ():
-        init ():
+        precomp (np.ndarray): Hamiltonian diagonal
+        params (np.ndarray): Array of QAOA circuit parameters
+        mixer_ops (list[np.ndarray]): list of mixer parameters
+        init (np.ndarray): initial state 
 
     Returns:
-        psi ():
+        psi (np.ndarray): new statevector
     """
     
     p = len(params)//2
@@ -169,30 +168,30 @@ def QAOA_eval(precomp,params,mixer_ops=None,init=None):
 
 def expval(precomp,psi):
     """"
-
+    Compute the expectation value of a diagonal hamiltonian on a state
 
     Parameters:
-        precomp ():
-        psi ():
+        precomp (np.ndarray): Diagonal elements of Hamiltonian 
+        psi (np.ndarray): Statevector 
 
     Returns:
-        
+        float: expectation value 
     """
     
     return np.sum(psi.conjugate() * precomp * psi).real
 
 def Q2_data(theta_list,rotation=None):
     """"
-
+    Get warmstart data from polar angles
 
     Parameters:
-        theta_list ():
-        rotation ():
+        theta_list (np.ndarray): A 2D array of angles in polar (2D) coordinates.
+        rotation (int): The index of the vertex to move to the top, defaults to None.
 
     Returns:
         tuple:
-            init ():
-            mixer_ops ():
+            init (np.ndarray): The initial statevector
+            mixer_ops (list[np.ndarray]): the mixer operators 
     """
     
     angles = vertex_on_top(theta_list,rotation)
@@ -202,17 +201,16 @@ def Q2_data(theta_list,rotation=None):
 
 def Q3_data(theta_list,rotation=None,z_rot=None):
     """"
-
+    Get warmstart data from spherical angles
 
     Parameters:
-        theta_list ():
-        rotation ():
-        z_rot ():
+        theta_list (np.ndarray): A 2D array of angles in spherical (3D) coordinates.
+        rotation (int): The index of the vertex to move to the top, defaults to None.
 
     Returns:
         tuple:
-            init ():
-            mixer_ops ():
+            init (np.ndarray): The initial statevector
+            mixer_ops (list[np.ndarray]): the mixer operators 
     """
     angles = vertex_on_top(theta_list,rotation,z_rot=z_rot)
     init = reduce(lambda a,b: np.kron(a,b), [np.array([np.cos(v[0]/2), np.exp(1j * v[1])*np.sin(v[0]/2)],dtype='complex128') for v in angles])
@@ -221,18 +219,21 @@ def Q3_data(theta_list,rotation=None,z_rot=None):
 
 def single_circuit_optimization_eff(precomp,opt,mixer_ops,init,p,param_guess=None):
     """"
-
+    Optimize a single qaoa circuit
 
     Parameters:
-        precomp ():
-        opt ():
-        mixer_ops ():
-        init ():
-        p ():
-        param_guess ():
+        precomp (np.ndarray): Diagonal of cost hamiltonian
+        opt (Qiskit.algorithms.optimizers): Qiskit optimizers
+        mixer_ops (list[np.ndarray]): List of mixer operators
+        init (np.ndarray): Initial state
+        p (int): circuit depth
+        param_guess (np.ndarray): initial optimization parameters. Defaults to None
 
     Returns:
-        
+        tuple:
+            (float):  Optimal cost
+            (np.ndarray): Parameters for optimal cost
+            (dict): history
     """
 
     history = {"cost": [], "params": []} if param_guess is None else {"cost": [expval(precomp,QAOA_eval(precomp,param_guess,mixer_ops=mixer_ops,init=init))], "params": [param_guess]}
@@ -245,26 +246,29 @@ def single_circuit_optimization_eff(precomp,opt,mixer_ops,init,p,param_guess=Non
         init_param = 2*np.pi*np.random.random(2*p)
     else:
         init_param = param_guess
-    res = opt.minimize(fun= compute_expectation, x0=init_param)#x0 = np.zeros(2*p))#
+    res = opt.minimize(fun= compute_expectation, x0=init_param)
     return np.max(history["cost"]),history["params"][np.argmax(history["cost"])],history
 
 def circuit_optimization_eff(precomp,opt,mixer_ops,init,p,reps=10,name=None,verbose=False,param_guesses=None):
     """"
-
+    Run repeated circuit optimization
 
     Parameters:
-        precomp ():
-        opt ():
-        mixer_ops ():
-        init ():
-        p ():
-        reps ():
-        name ():
-        verbose ():
-        param_gueses ():
-
+        precomp (np.ndarray): Diagonal matrix elements
+        opt (Qiskit.algorithms.optimizers):
+        mixer_ops (list[np.ndarray]): mixer operators
+        init (np.ndarray): initial statevector
+        p (int): circuit depth
+        reps (int): Number of optimizations. Defaults to 10
+        name (str): Name for logging. Defaults to None
+        verbose (bool): Whether or not to print progress. Defaults to None
+        param_gueses (np.ndarray): initial circuit params. Defaults to None
+    
     Returns:
-        np.ndarray: 
+        tuple:
+            (list[float]):  Optimal costs
+            (list[np.ndarray]): Parameters for optimal costs
+            (list[dict]): histories
     """
     
     if(verbose):
@@ -291,14 +295,22 @@ def circuit_optimization_eff(precomp,opt,mixer_ops,init,p,reps=10,name=None,verb
 
 def initialize(A,BM_kwargs={"iters":100, "reps":50, "eta":0.05},GW_kwargs={"reps":50}):
     """"
-
+    Find relevant warmstart info for circuit
 
     Parameters:
-        A (np.ndarray):
-        BM_kwargs (dict):
+        A (np.ndarray): Max-cut adj matrix
+        BM_kwargs (dict): Dictionary of options for BM warmstart 
+        GW_kwargs (dict):  Dictionary of options for GW warmstart  
 
     Returns:
-    
+        list:
+            (np.ndarray): precomputed Hamiltonian diagonal
+            (np.ndarray): BM2 angles
+            (np.ndarray): BM3 angles
+            (np.ndarray): GW2 angles
+            (np.ndarray): GW3 angles
+            (np.ndarray): Optimal solution
+            (np.ndarray): Optimal cost
     """
     
     precomp = pre_compute(A)
@@ -312,25 +324,25 @@ def initialize(A,BM_kwargs={"iters":100, "reps":50, "eta":0.05},GW_kwargs={"reps
 
 def warmstart_comp(A,opt,p_max=5,rotation_options=[None,0,-1],BM_kwargs={"iters":100, "reps":50, "eta":0.05},GW_kwargs={"reps":50},reps=10,optimizer_kwargs={'name':None,'verbose':True},ws_list=['BM2','BM3','GW2','GW3',None],initial_data=None,keep_hist=False):
     """"
-
+    Run a comparison of all the warmstarts
 
     Parameters:
-        A (np.ndarray):
-        opt ():
-        p_max ():
-        rotation_options ():
-        BM_kwargs (dict)
-        GW_kwargs (dict):
-        reps (int):
-        optimizer_kwargs (dict):
-        ws_list (list):
-        initial_data ():
-        keep_hist (bool):
+        A (np.ndarray): Max-cut adj matrix
+        opt (Qiskit.algorithms.optimizers): Optimizers
+        p_max (int): Maximum depth, QAOA is optimized from 1...p. Defaults to 5
+        rotation_options (list): List of rotation options. Defaults to [None,0,-1]
+        BM_kwargs (dict): Dictionary of BM warmstart options
+        GW_kwargs (dict): Dictionary of GW warmstart options
+        reps (int): Number of repetitions for each circuit, defaults to 10
+        optimizer_kwargs (dict): Options for optimizers
+        ws_list (list): List of warmstarts to compare
+        initial_data (list): Initial warmstart data. Defaults to None
+        keep_hist (bool): Wether to keep the history
 
     Returns:
         tuple:
-            qc_data (): 
-            opt_data ():
+            qc_data (dict): Data for circuits (warmstart info) 
+            opt_data (dict): Optimization data
     """
     ###initialization
     if(initial_data is None):
@@ -401,14 +413,16 @@ def warmstart_comp(A,opt,p_max=5,rotation_options=[None,0,-1],BM_kwargs={"iters"
 
 def brute_force_maxcut(A,precomp=None):
     """
-
+    Brute force max-cut for an array by solving the precompute's maximum (must faster than other brute force if we already have precomp)
 
     Parameters:
-        A (np.ndarray):
-        precomp ():
+        A (np.ndarray): max-cut adj matrix
+        precomp (np.ndarray): If available, cost matrix diagonal elements. Defaults to None
 
     Returns:
-        np.ndarray: 
+        tuple:
+            np.ndarray: optimal solution
+            float: optimal cost
     """
     
     if(precomp is None):
@@ -420,17 +434,17 @@ def brute_force_maxcut(A,precomp=None):
 
 def opt_sampling_prob(v,precomp,params,mixer_ops=None,init=None):
     """
-
+    Find the optimal sampling probability 
 
     Parameters:
-        v ():
-        precomp ():
-        params ():
-        mixer_ops ():
-        init ():
+        v (np.ndarray): bit-string for optimal value
+        precomp (np.ndarray): Diagonal of cost Hamiltonian
+        params (np.ndarray): Circuit parameters
+        mixer_ops (list[np.ndarray]): mixer operators
+        init (np.ndarray): initial statevector
 
     Returns:
-    
+        float: Optimal sampling probability 
     """
     psi = QAOA_eval(precomp,params,mixer_ops,init)
     return np.sum(abs(psi[[np.sum([2**i * v for i,v in enumerate(l[::-1])]) for l in ((v+1)//2)]])**2)
@@ -438,21 +452,21 @@ def opt_sampling_prob(v,precomp,params,mixer_ops=None,init=None):
 ###Depth 0 Test
 def depth0_ws_comp(n,A_func,ws_list = ['BM2','BM3','GW2','GW3'],rotation_options = None,count=1000):
     """
-
+    Compare warmstarts at depth 0 (much faster since now we don't have to optimize)
 
     Parameters:
-        n ():
-        A_func ():
-        ws_list (list):
-        rotation_options ():
-        count (int):
+        n (int): Number of qubits
+        A_func (function): Method to generate adj matricies
+        ws_list (list): List of warmstart options
+        rotation_options (list): List of rotation options to check. Defualts to None, in which case we check all 
+        count (int): Number of samples
 
     Returns:
         tuple:
-            comparison_data (): 
-            best_angle_data ():
-            ws_data ():
-            A_list ():
+            comparison_data (dict): Comparing the relative performance of the warmstarts
+            best_angle_data (dict): Contains the best angles for cost and for probability for each warmstart 
+            ws_data (list): List of all warmstart parameters
+            A_list (list): List of adjacency matricies generated
     """
     if(rotation_options is None):
         rotation_options = list(range(n))+[None]
