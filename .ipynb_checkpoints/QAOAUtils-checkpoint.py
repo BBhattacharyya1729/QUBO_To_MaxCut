@@ -4,36 +4,42 @@ import numpy as np
 from functools import reduce
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
+import matplotlib.colors as mcolors
+from matplotlib.lines import Line2D
+from matplotlib.ticker import MultipleLocator, FixedLocator, MaxNLocator, FormatStrFormatter
 from tqdm import tqdm
 from tqdm.contrib import itertools
 from tqdm.notebook import tqdm
+import pymupdf as fitz
+import os
+
 
 """
 Hamiltonian from adjacency matrix A
 """
 def indexedZ(i,n):
     """
-    
+    Returns a SparsePauli Op corresponding to a Z operator on a single qubit
 
     Parameters:
-        i (): 
-        n ():
+        i (int): qubit index 
+        n (int): number of qubits
 
     Returns:
-        
+        SparsePauliOp: SparsePauli for single Z operator
     """
     
     return SparsePauliOp("I" * (n-i-1) + "Z" + "I" * i)
 
 def getHamiltonian(A):
     """
-    
+    Gets a Hamiltonian from a max-cut adjacency matrix
 
     Parameters:
-        A ():
+        A (np.ndarray): max-cut adjacency matrix
 
     Returns:
-        
+        SparsePauliOp: Hamiltonian 
     """
     
     n = len(A)
@@ -47,31 +53,31 @@ def getHamiltonian(A):
 
 def SU2_op(x,y,z,t):
     """
-    
+    Get the matrix for a SU2 rotation around an axis 
 
     Parameters:
-        x ():
-        y ():
-        z ():
-        t ():
+        x (float): x-coordinate of rotation axis
+        y (float): y-coordinate of rotation axis
+        z (float): z-coordinate of rotation axis
+        t (float): rotation angle
 
     Returns:
-        np.ndarray:
+        np.ndarray: matrix for the SU2 rotation
     """
     
     return np.array([[np.cos(t)-1j * np.sin(t)*z, -np.sin(t) * (y+1j * x)],[ -np.sin(t) * (-y+1j * x),np.cos(t)+1j * np.sin(t)*z]])
 
 def apply_single_qubit_op(psi,U,q):
     """
-    
+    Efficiently apply a single qubit operator U on qubit q to statevector psi
 
     Parameters:
-        psi ():
-        U ():
-        q ():
+        psi (np.ndarray): Statevector
+        U (np.ndarray): Operator 
+        q (int): qubit index 
 
     Returns:
-        np.ndarray:
+        np.ndarray: New Statevector 
     """
     
     n=int(np.log2(len(psi)))
@@ -90,28 +96,27 @@ def apply_single_qubit_op(psi,U,q):
 
 def pre_compute(A):
     """
-    
+    Pre-compute the diagonal elements of Hamiltonian corresponding to max-cut adjacency matrix
 
     Parameters:
-        A ():
+        A (np.ndarray): adjacency matrix
 
     Returns:
-        np.ndarray: 
+        np.ndarray: Array containing matrix diagonal  
     """
     
     return np.array(scipy.sparse.csr_matrix.diagonal(getHamiltonian(np.flip(A)).to_matrix(sparse=True))).real
 
 def apply_mixer(psi,U_ops):
     """
+    Apply mixer layer to state
     
-
     Parameters:
-        psi ():
-        U ():
-        q ():
+        psi (np.ndarray): Original state vector
+        U_op (list[np.ndarray]): list of mixer operators
 
     Returns:
-        psi (): 
+        psi (np.ndarray): New statevector  
     """
     
     for n in range(0,len(U_ops)):
@@ -120,31 +125,31 @@ def apply_mixer(psi,U_ops):
 
 def cost_layer(precomp,psi,t):
     """
-    
+    Given a precomputed Hamiltonian diagonal, apply the cost layer
 
     Parameters:
-        precomp ():
-        psi ():
-        t ():
+        precomp (np.ndarray): Precompute diagonal
+        psi (np.ndarray): Statevector
+        t (float): Rotation angle
 
     Returns:
-        
+        np.ndarray: New statevector
     """
     
     return np.exp(-1j * precomp*t) * psi
 
 def QAOA_eval(precomp,params,mixer_ops=None,init=None):
     """"
-
+    Returns statevector after applying QAOA circuit
 
     Parameters:
-        precomp ():
-        params ():
-        mixer_ops ():
-        init ():
+        precomp (np.ndarray): Hamiltonian diagonal
+        params (np.ndarray): Array of QAOA circuit parameters
+        mixer_ops (list[np.ndarray]): list of mixer parameters
+        init (np.ndarray): initial state 
 
     Returns:
-        psi ():
+        psi (np.ndarray): new statevector
     """
     
     p = len(params)//2
@@ -169,30 +174,30 @@ def QAOA_eval(precomp,params,mixer_ops=None,init=None):
 
 def expval(precomp,psi):
     """"
-
+    Compute the expectation value of a diagonal hamiltonian on a state
 
     Parameters:
-        precomp ():
-        psi ():
+        precomp (np.ndarray): Diagonal elements of Hamiltonian 
+        psi (np.ndarray): Statevector 
 
     Returns:
-        
+        float: expectation value 
     """
     
     return np.sum(psi.conjugate() * precomp * psi).real
 
 def Q2_data(theta_list,rotation=None):
     """"
-
+    Get warmstart data from polar angles
 
     Parameters:
-        theta_list ():
-        rotation ():
+        theta_list (np.ndarray): A 2D array of angles in polar (2D) coordinates.
+        rotation (int): The index of the vertex to move to the top, defaults to None.
 
     Returns:
         tuple:
-            init ():
-            mixer_ops ():
+            init (np.ndarray): The initial statevector
+            mixer_ops (list[np.ndarray]): the mixer operators 
     """
     
     angles = vertex_on_top(theta_list,rotation)
@@ -202,17 +207,16 @@ def Q2_data(theta_list,rotation=None):
 
 def Q3_data(theta_list,rotation=None,z_rot=None):
     """"
-
+    Get warmstart data from spherical angles
 
     Parameters:
-        theta_list ():
-        rotation ():
-        z_rot ():
+        theta_list (np.ndarray): A 2D array of angles in spherical (3D) coordinates.
+        rotation (int): The index of the vertex to move to the top, defaults to None.
 
     Returns:
         tuple:
-            init ():
-            mixer_ops ():
+            init (np.ndarray): The initial statevector
+            mixer_ops (list[np.ndarray]): the mixer operators 
     """
     angles = vertex_on_top(theta_list,rotation,z_rot=z_rot)
     init = reduce(lambda a,b: np.kron(a,b), [np.array([np.cos(v[0]/2), np.exp(1j * v[1])*np.sin(v[0]/2)],dtype='complex128') for v in angles])
@@ -221,18 +225,21 @@ def Q3_data(theta_list,rotation=None,z_rot=None):
 
 def single_circuit_optimization_eff(precomp,opt,mixer_ops,init,p,param_guess=None):
     """"
-
+    Optimize a single qaoa circuit
 
     Parameters:
-        precomp ():
-        opt ():
-        mixer_ops ():
-        init ():
-        p ():
-        param_guess ():
+        precomp (np.ndarray): Diagonal of cost hamiltonian
+        opt (Qiskit.algorithms.optimizers): Qiskit optimizers
+        mixer_ops (list[np.ndarray]): List of mixer operators
+        init (np.ndarray): Initial state
+        p (int): circuit depth
+        param_guess (np.ndarray): initial optimization parameters. Defaults to None
 
     Returns:
-        
+        tuple:
+            (float):  Optimal cost
+            (np.ndarray): Parameters for optimal cost
+            (dict): history
     """
 
     history = {"cost": [], "params": []} if param_guess is None else {"cost": [expval(precomp,QAOA_eval(precomp,param_guess,mixer_ops=mixer_ops,init=init))], "params": [param_guess]}
@@ -245,26 +252,29 @@ def single_circuit_optimization_eff(precomp,opt,mixer_ops,init,p,param_guess=Non
         init_param = 2*np.pi*np.random.random(2*p)
     else:
         init_param = param_guess
-    res = opt.minimize(fun= compute_expectation, x0=init_param)#x0 = np.zeros(2*p))#
+    res = opt.minimize(fun= compute_expectation, x0=init_param)
     return np.max(history["cost"]),history["params"][np.argmax(history["cost"])],history
 
 def circuit_optimization_eff(precomp,opt,mixer_ops,init,p,reps=10,name=None,verbose=False,param_guesses=None):
     """"
-
+    Run repeated circuit optimization
 
     Parameters:
-        precomp ():
-        opt ():
-        mixer_ops ():
-        init ():
-        p ():
-        reps ():
-        name ():
-        verbose ():
-        param_gueses ():
-
+        precomp (np.ndarray): Diagonal matrix elements
+        opt (Qiskit.algorithms.optimizers):
+        mixer_ops (list[np.ndarray]): mixer operators
+        init (np.ndarray): initial statevector
+        p (int): circuit depth
+        reps (int): Number of optimizations. Defaults to 10
+        name (str): Name for logging. Defaults to None
+        verbose (bool): Whether or not to print progress. Defaults to None
+        param_gueses (np.ndarray): initial circuit params. Defaults to None
+    
     Returns:
-        np.ndarray: 
+        tuple:
+            (list[float]):  Optimal costs
+            (list[np.ndarray]): Parameters for optimal costs
+            (list[dict]): histories
     """
     
     if(verbose):
@@ -291,14 +301,22 @@ def circuit_optimization_eff(precomp,opt,mixer_ops,init,p,reps=10,name=None,verb
 
 def initialize(A,BM_kwargs={"iters":100, "reps":50, "eta":0.05},GW_kwargs={"reps":50}):
     """"
-
+    Find relevant warmstart info for circuit
 
     Parameters:
-        A (np.ndarray):
-        BM_kwargs (dict):
+        A (np.ndarray): Max-cut adj matrix
+        BM_kwargs (dict): Dictionary of options for BM warmstart 
+        GW_kwargs (dict):  Dictionary of options for GW warmstart  
 
     Returns:
-    
+        list:
+            (np.ndarray): precomputed Hamiltonian diagonal
+            (np.ndarray): BM2 angles
+            (np.ndarray): BM3 angles
+            (np.ndarray): GW2 angles
+            (np.ndarray): GW3 angles
+            (np.ndarray): Optimal solution
+            (np.ndarray): Optimal cost
     """
     
     precomp = pre_compute(A)
@@ -312,25 +330,25 @@ def initialize(A,BM_kwargs={"iters":100, "reps":50, "eta":0.05},GW_kwargs={"reps
 
 def warmstart_comp(A,opt,p_max=5,rotation_options=[None,0,-1],BM_kwargs={"iters":100, "reps":50, "eta":0.05},GW_kwargs={"reps":50},reps=10,optimizer_kwargs={'name':None,'verbose':True},ws_list=['BM2','BM3','GW2','GW3',None],initial_data=None,keep_hist=False):
     """"
-
+    Run a comparison of all the warmstarts
 
     Parameters:
-        A (np.ndarray):
-        opt ():
-        p_max ():
-        rotation_options ():
-        BM_kwargs (dict)
-        GW_kwargs (dict):
-        reps (int):
-        optimizer_kwargs (dict):
-        ws_list (list):
-        initial_data ():
-        keep_hist (bool):
+        A (np.ndarray): Max-cut adj matrix
+        opt (Qiskit.algorithms.optimizers): Optimizers
+        p_max (int): Maximum depth, QAOA is optimized from 1...p. Defaults to 5
+        rotation_options (list): List of rotation options. Defaults to [None,0,-1]
+        BM_kwargs (dict): Dictionary of BM warmstart options
+        GW_kwargs (dict): Dictionary of GW warmstart options
+        reps (int): Number of repetitions for each circuit, defaults to 10
+        optimizer_kwargs (dict): Options for optimizers
+        ws_list (list): List of warmstarts to compare
+        initial_data (list): Initial warmstart data. Defaults to None
+        keep_hist (bool): Wether to keep the history
 
     Returns:
         tuple:
-            qc_data (): 
-            opt_data ():
+            qc_data (dict): Data for circuits (warmstart info) 
+            opt_data (dict): Optimization data
     """
     ###initialization
     if(initial_data is None):
@@ -401,14 +419,16 @@ def warmstart_comp(A,opt,p_max=5,rotation_options=[None,0,-1],BM_kwargs={"iters"
 
 def brute_force_maxcut(A,precomp=None):
     """
-
+    Brute force max-cut for an array by solving the precompute's maximum (must faster than other brute force if we already have precomp)
 
     Parameters:
-        A (np.ndarray):
-        precomp ():
+        A (np.ndarray): max-cut adj matrix
+        precomp (np.ndarray): If available, cost matrix diagonal elements. Defaults to None
 
     Returns:
-        np.ndarray: 
+        tuple:
+            np.ndarray: optimal solution
+            float: optimal cost
     """
     
     if(precomp is None):
@@ -420,17 +440,17 @@ def brute_force_maxcut(A,precomp=None):
 
 def opt_sampling_prob(v,precomp,params,mixer_ops=None,init=None):
     """
-
+    Find the optimal sampling probability 
 
     Parameters:
-        v ():
-        precomp ():
-        params ():
-        mixer_ops ():
-        init ():
+        v (np.ndarray): bit-string for optimal value
+        precomp (np.ndarray): Diagonal of cost Hamiltonian
+        params (np.ndarray): Circuit parameters
+        mixer_ops (list[np.ndarray]): mixer operators
+        init (np.ndarray): initial statevector
 
     Returns:
-    
+        float: Optimal sampling probability 
     """
     psi = QAOA_eval(precomp,params,mixer_ops,init)
     return np.sum(abs(psi[[np.sum([2**i * v for i,v in enumerate(l[::-1])]) for l in ((v+1)//2)]])**2)
@@ -438,21 +458,21 @@ def opt_sampling_prob(v,precomp,params,mixer_ops=None,init=None):
 ###Depth 0 Test
 def depth0_ws_comp(n,A_func,ws_list = ['BM2','BM3','GW2','GW3'],rotation_options = None,count=1000):
     """
-
+    Compare warmstarts at depth 0 (much faster since now we don't have to optimize)
 
     Parameters:
-        n ():
-        A_func ():
-        ws_list (list):
-        rotation_options ():
-        count (int):
+        n (int): Number of qubits
+        A_func (function): Method to generate adj matricies
+        ws_list (list): List of warmstart options
+        rotation_options (list): List of rotation options to check. Defualts to None, in which case we check all 
+        count (int): Number of samples
 
     Returns:
         tuple:
-            comparison_data (): 
-            best_angle_data ():
-            ws_data ():
-            A_list ():
+            comparison_data (dict): Comparing the relative performance of the warmstarts
+            best_angle_data (dict): Contains the best angles for cost and for probability for each warmstart 
+            ws_data (list): List of all warmstart parameters
+            A_list (list): List of adjacency matricies generated
     """
     if(rotation_options is None):
         rotation_options = list(range(n))+[None]
@@ -747,629 +767,619 @@ def final_boxplot(prob, p_data,path=None):
             plt.savefig(path+".pdf",dpi=300)
     plt.show()
 
+def get_depth_combined(prob, DATA, PSC_DATA50, M_list, A_list, idx_list, p_max = 5, std=0.25, problemLength=10, axs=None, path=None):
+    # Sizes
+    title_size = 45
+    title_y_spacing = 1.05
+    title_x_spacing = 0.51
+    y_axis_title_size = 50
+    x_axis_title_size = 25
+    x_ticker_size = 25
+    y_ticker_size = 23
+    axs_title_size = 30
+    
 
-def get_depth_combined(prob, idx_dict, PSC_DATA, DATA, PSC_DATA50, M_list, A_list, path=None, p_max=5, std=.25):
-   
-    fig, axs = plt.subplots(2, 4, figsize=(38.4, 7.2), sharey='row')  # 2x4 grid for all plots
-
-    plt.subplots_adjust(wspace=0, hspace=0.15)  # Adjust spacing
-
-    markers = ['o', 'o', 'o', 'o', 's']  # Define a list of markers
-    fig.suptitle(prob, fontsize=50, y=0.94)  # Set the title with the name of `prob`
-
-    def plot_depth(ws_list, ax):
-        ax.tick_params(axis='y', which='both', length=5, width=1)
-        ax.minorticks_off()
-        marker_idx = 0  # Initialize marker index
-        for ws in ws_list:
-            if ws is None:
-                data = []
-                for idx in range(*idx_dict[prob]):
-                    M = M_list[idx]
-                    A = A_list[idx]
-                    data.append([abs(np.max(l))
-                                 for l in [DATA[idx][p][ws]['probs'] for p in range(0, 1 + p_max)]])
-                mean_data = np.mean(data, axis=0)
-                std_dev_data = np.std(data, axis=0)
-                line, = ax.plot(range(0, p_max + 1), mean_data, marker=markers[marker_idx % len(markers)], linestyle='--', label="None")
-                ax.fill_between(range(0, p_max + 1), 
-                                (mean_data - std * std_dev_data), 
-                                (mean_data + std * std_dev_data), 
-                                alpha=0.2, color=line.get_color())
-                marker_idx += 1  # Increment marker index
-            else:
-                for r, label in zip([0, -1, None], ['Warmstart First Rotation', 'Warmstart Last Rotation', 'Warmstart No Rotation']):
-                    data = []
-                    for idx in range(*idx_dict[prob]):
-                        M = M_list[idx]
-                        A = A_list[idx]
-                        data.append([abs(np.max(l))
-                                     for l in [DATA[idx][p][ws][r]['probs'] for p in range(0, 1 + p_max)]])
-                    mean_data = np.mean(data, axis=0)
-                    std_dev_data = np.std(data, axis=0)
-                    line, = ax.plot(range(0, p_max + 1), mean_data, marker=markers[marker_idx % len(markers)], label=label)
-                    ax.fill_between(range(0, p_max + 1), 
-                                    (mean_data - std * std_dev_data), 
-                                    (mean_data + std * std_dev_data), 
-                                    alpha=0.2, color=line.get_color())
-                    marker_idx += 1  # Increment marker index
-        #PSC
-        data = []
-        for idx in range(*idx_dict[prob]):
-            M = M_list[idx]
-            A = A_list[idx]
-            data.append([abs(np.max(l))  
-                         for l in [PSC_DATA[idx][p]['probs'] for p in range(0, 1 + p_max)]])
-        mean_data = np.mean(data, axis=0)
-        std_dev_data = np.std(data, axis=0)
-        line, = ax.plot(range(0, p_max + 1), mean_data, marker=markers[marker_idx % len(markers)], label='PSC')
-        ax.fill_between(range(0, p_max + 1), 
-                        (mean_data - std * std_dev_data), 
-                        (mean_data + std * std_dev_data), 
-                        alpha=0.2, color=line.get_color())
-        #PSC_50
-        data_50 = []
-        for idx in range(*idx_dict[prob]):
-            M = M_list[idx]
-            A = A_list[idx]
-            data_50.append([abs(np.max(l))  
-                            for l in [PSC_DATA50[idx][p]['probs'] for p in range(0, 1 + p_max)]])
-        mean_data_50 = np.mean(data_50, axis=0)
-        std_dev_data_50 = np.std(data_50, axis=0)
-        line, = ax.plot(range(0, p_max + 1), mean_data_50, marker=markers[marker_idx % len(markers)], label='PSC50', color='goldenrod')
-        ax.fill_between(range(0, p_max + 1), 
-                        (mean_data_50 - std * std_dev_data_50), 
-                        (mean_data_50 + std * std_dev_data_50),
-                        color=line.get_color(), alpha=0.2)
-        ax.legend().remove()  # Remove legend
-
-    def plot_cost(ws_list, ax):
-        def compute_and_plot(data, ws, r, ax, label_suffix, line_style='-', fill_color=None, color=None):
-            mean_data = np.mean(data, axis=0)
-            std_dev_data = np.std(data, axis=0)
-            line, = ax.plot(range(0, p_max + 1), mean_data, marker=markers[marker_idx % len(markers)], label=f'{ws} {label_suffix}', linestyle=line_style, color=color)
-            ax.fill_between(range(0, p_max + 1), 
-                            mean_data - std * std_dev_data, 
-                            mean_data + std * std_dev_data, 
-                            alpha=0.2, color=line.get_color())
+    # Initializing Figures
+    if axs is None:
+        fig, axs = plt.subplots(2, 4, figsize=(40, 7), sharey='row')
+        fig.suptitle(prob, fontsize=title_size, y=title_y_spacing, x=title_x_spacing)
     
-        ws_data = {0: [], -1: [], None: []}
-        psc_data = []
-        psc_data50 = []
-        none_data = []
-        marker_idx = 0  # Initialize marker index
+    axs[0, 0].set_ylabel(r'$\mathcal{P}$', fontsize=y_axis_title_size, labelpad=10)
+    axs[1, 0].set_ylabel(r'α', fontsize=y_axis_title_size, labelpad=10)
     
-        for idx in range(*idx_dict[prob]):
-            M = M_list[idx]
-            A = A_list[idx]
-            m = -brute_force_maxcut(-A)[-1]
-    
-            none_data.append([(np.max(l) - m) / (M - m) 
-                              for l in [DATA[idx][p][None]['cost'] for p in range(0, 1 + p_max)]])
-    
-            if ws_list[0] is not None:
-                for r, label in zip([0, -1, None], ['Warmstart First Rotation', 'Warmstart Last Rotation', 'Warmstart No Rotation']):
-                    ws_data[r].append([(np.max(l) - m) / (M - m) 
-                                       for l in [DATA[idx][p][ws_list[0]][r]['cost'] for p in range(0, 1 + p_max)]])
-            
-            psc_data.append([(np.max(l) - m - np.sum(-A[:-1, :-1]) / 4) / (M - m) 
-                             for l in [PSC_DATA[idx][p]['cost'] for p in range(0, 1 + p_max)]])
-
-            psc_data50.append([(np.max(l) - m - np.sum(-A[:-1, :-1]) / 4) / (M - m) 
-                               for l in [PSC_DATA50[idx][p]['cost'] for p in range(0, 1 + p_max)]])
-    
-        compute_and_plot(none_data, 'None', "", ax, label_suffix="", line_style='--')
-        marker_idx += 1  # Increment marker index
-        if ws_list[0] is not None:
-            for r, r_data in ws_data.items():
-                compute_and_plot(r_data, ws_list[0], r, ax, label_suffix=f"{r}")
-                marker_idx += 1  # Increment marker index
-    
-        compute_and_plot(psc_data, 'PSC', "", ax, label_suffix="")
-        compute_and_plot(psc_data50, 'PSC50', "", ax, label_suffix="", fill_color="goldenrod", color="goldenrod")
-        ax.legend().remove()  # Remove legend
-    
-    # Plot the depth graphs in the first row
-    plot_depth([None, 'GW2'], axs[0, 0])
-    plot_depth([None, 'GW3'], axs[0, 1])
-    plot_depth([None, 'BM2'], axs[0, 2])
-    plot_depth([None, 'BM3'], axs[0, 3])
-    
-    # Plot the cost graphs in the second row
-    plot_cost(['GW2'], axs[1, 0])
-    plot_cost(['GW3'], axs[1, 1])
-    plot_cost(['BM2'], axs[1, 2])
-    plot_cost(['BM3'], axs[1, 3])
-    
-    # Ensure the x-axis line is visible and remove x-axis labels for the first row
-    for ax in axs.flat:
-        ax.spines['bottom'].set_visible(True)  # Ensure x-axis line is visible
-        ax.set_xticks(range(p_max + 1))  # Set x-axis ticks
-        ax.set_xticklabels(range(p_max + 1))  # Set x-axis labels
-    
-    # Set y-axis label only for the leftmost plot in each row
-    axs[0, 0].set_ylabel(r'$\mathcal{P}$', fontsize=25, labelpad=10)
-    axs[1, 0].set_ylabel(r'α', fontsize=25, labelpad=10)
-    
-    # Set labels for x-axis
     for ax in axs[1, :]:
-        ax.set_xlabel('p', fontsize=25)
-    
-    # Set titles for the top row only
-    axs[0, 0].set_title("GW2", fontsize=20)
-    axs[0, 1].set_title("GW3", fontsize=20)
-    axs[0, 2].set_title("BM2", fontsize=20)
-    axs[0, 3].set_title("BM3", fontsize=20)
+        ax.set_xlabel('p', fontsize=x_axis_title_size)
 
-    for ax in axs.flat:
-        ax.spines['bottom'].set_visible(True)  # Ensure x-axis line is visible
-        ax.set_xticks(range(p_max + 1))  # Set x-axis ticks
-        ax.set_xticklabels(range(p_max + 1))  # Set x-axis labels
-        ax.tick_params(axis='both', labelsize=15)  # Adjust tick label size for both axes
+    for row in range(2):
+        for col in range(4):
+            axs[row, col].tick_params(axis='x', labelsize=x_ticker_size)
+            axs[row, col].tick_params(axis='y', labelsize=y_ticker_size)
+            axs[row, col].grid(True, which='major', axis='y', linestyle='--', alpha=0.5)
 
     for ax in axs[0, :]:
-        ax.set_xticklabels([])  # Remove x-axis labels
+        ax.set_xticklabels([])
         ax.set_xticks([])
 
-    # Create a legend at the bottom center
-    fig.suptitle(f"{prob}", fontsize=30, y=0.97)
+    axs[0, 0].set_title("GW2", fontsize=axs_title_size)
+    axs[0, 1].set_title("GW3", fontsize=axs_title_size)
+    axs[0, 2].set_title("BM2", fontsize=axs_title_size)
+    axs[0, 3].set_title("BM3", fontsize=axs_title_size)
+
+    plt.subplots_adjust(wspace=0, hspace=0.15)
+
+    # Gathering Probabilty Data
+    def get_prob_data(data, idx_list, prob_name, ws=None, p_max=5, rotation=None):
+        mean_probs = []
+        std_probs = []
     
-    if path is not None:
-        plt.savefig(path + ".pdf", dpi=600, bbox_inches='tight')
+        for p in range(0, 1 + p_max):
+            vals_per_idx = []
+            for idx in range(*idx_list[prob_name]):
+                prob = data[idx][p][ws][rotation]['probs'] if ws is not None else data[idx][p][None]['probs']
+                vals_per_idx.append(np.max(prob)) 
+            mean_probs.append(np.mean(vals_per_idx))
+            std_probs.append(np.std(vals_per_idx))
     
-    plt.show()
-
-def get_depth_combined_PO(prob, idx_dict, PSC_DATA, DATA, PSC_DATA50, M_list, A_list, path=None, p_max=5, std=.25):
-   
-    fig, axs = plt.subplots(2, 4, figsize=(38.4, 7.2), sharey='row')  # 2x4 grid for all plots
-
-    plt.subplots_adjust(wspace=0, hspace=0.15)  # Adjust spacing
-
-    markers = ['o', 'o', 'o', 'o', 's']  # Define a list of markers
-    fig.suptitle(prob, fontsize=50, y=0.94)  # Set the title with the name of `prob`
-
-    def plot_depth(ws_list, ax):
-        ax.tick_params(axis='y', which='both', length=5, width=1)
-        ax.minorticks_off()
-        marker_idx = 0  # Initialize marker index
-        for ws in ws_list:
-            if ws is None:
-                data = []
-                for idx in range(*idx_dict[prob]):
-                    M = M_list[idx]
-                    A = A_list[idx]
-                    data.append([abs(np.max(l))
-                                 for l in [DATA[idx][p][ws]['probs'] for p in range(0, 1 + p_max)]])
-                mean_data = np.mean(data, axis=0)
-                std_dev_data = np.std(data, axis=0)
-                line, = ax.plot(range(0, p_max + 1), mean_data, marker=markers[marker_idx % len(markers)], linestyle='--', label="None")
-                ax.fill_between(range(0, p_max + 1), 
-                                (mean_data - std * std_dev_data), 
-                                (mean_data + std * std_dev_data), 
-                                alpha=0.2, color=line.get_color())
-                marker_idx += 1  # Increment marker index
-            else:
-                for r, label in zip([0, -1, None], ['Warmstart First Rotation', 'Warmstart Last Rotation', 'Warmstart No Rotation']):
-                    data = []
-                    for idx in range(*idx_dict[prob]):
-                        M = M_list[idx]
-                        A = A_list[idx]
-                        data.append([abs(np.max(l))
-                                     for l in [DATA[idx][p][ws][r]['probs'] for p in range(0, 1 + p_max)]])
-                    mean_data = np.mean(data, axis=0)
-                    std_dev_data = np.std(data, axis=0)
-                    line, = ax.plot(range(0, p_max + 1), mean_data, marker=markers[marker_idx % len(markers)], label=label)
-                    ax.fill_between(range(0, p_max + 1), 
-                                    (mean_data - std * std_dev_data), 
-                                    (mean_data + std * std_dev_data), 
-                                    alpha=0.2, color=line.get_color())
-                    marker_idx += 1  # Increment marker index
-        #PSC
-        data = []
-        for idx in range(*idx_dict[prob]):
-            M = M_list[idx]
+        return mean_probs, std_probs
+    
+    def compute_instance_min(A_list, idx_list, prob_name):
+        m_values = []
+        for idx in range(*idx_list[prob_name]):
             A = A_list[idx]
-            data.append([abs(np.max(l))  
-                         for l in [PSC_DATA[idx][p]['probs'] for p in range(0, 1 + p_max)]])
-        mean_data = np.mean(data, axis=0)
-        std_dev_data = np.std(data, axis=0)
-        line, = ax.plot(range(0, p_max + 1), mean_data, marker=markers[marker_idx % len(markers)], label='PSC')
-        ax.fill_between(range(0, p_max + 1), 
-                        (mean_data - std * std_dev_data), 
-                        (mean_data + std * std_dev_data), 
-                        alpha=0.2, color=line.get_color())
-        #PSC_50
-        ax.legend().remove()  # Remove legend
+            m_values.append(-brute_force_maxcut(-A)[-1])
+        return m_values
 
-    def plot_cost(ws_list, ax):
-        def compute_and_plot(data, ws, r, ax, label_suffix, line_style='-', fill_color=None, color=None):
-            mean_data = np.mean(data, axis=0)
-            std_dev_data = np.std(data, axis=0)
-            line, = ax.plot(range(0, p_max + 1), mean_data, marker=markers[marker_idx % len(markers)], label=f'{ws} {label_suffix}', linestyle=line_style, color=color)
-            ax.fill_between(range(0, p_max + 1), 
-                            mean_data - std * std_dev_data, 
-                            mean_data + std * std_dev_data, 
-                            alpha=0.2, color=line.get_color())
+    def get_cost_data(data, idx_list, prob_name, M_values, m_values, ws=None, p_max=5, rotation=None):
+        all_instances = []
+
+        for i, idx in enumerate(range(*idx_list[prob_name])):
+            m = m_values[i]
+            M = M_values[i]
+            alpha_vals = []   
+            for p in range(0, p_max + 1):
+
+                if ws is not None:
+                    cost_ws = np.max(data[idx][p][ws][rotation]['cost'])
+                else:
+                    cost_ws = np.max(data[idx][p][None]['cost'])
     
-        ws_data = {0: [], -1: [], None: []}
-        psc_data = []
-        psc_data50 = []
-        none_data = []
-        marker_idx = 0  # Initialize marker index
+                alpha = (cost_ws - m) / (M - m)
+                alpha_vals.append(alpha)
+
+            all_instances.append(alpha_vals)
     
-        for idx in range(*idx_dict[prob]):
-            M = M_list[idx]
-            A = A_list[idx]
-            m = -brute_force_maxcut(-A)[-1]
+        mean_cost = np.mean(all_instances, axis=0)
+        std_cost = np.std(all_instances, axis=0)
+        
+        return mean_cost, std_cost
+        
+    def get_psc_prob(DATA_psc, idx_list, prob):
+        all_instances = []
     
-            none_data.append([(np.max(l) - m) / (M - m) 
-                              for l in [DATA[idx][p][None]['cost'] for p in range(0, 1 + p_max)]])
+        for idx in range(*idx_list[prob]):
+            prob_vals = []
+            for p in range(0, p_max + 1):
+                prob_p = np.max(DATA_psc[idx][p]['probs'])
+                prob_vals.append(prob_p)
+            all_instances.append(prob_vals)
     
-            if ws_list[0] is not None:
-                for r, label in zip([0, -1, None], ['Warmstart First Rotation', 'Warmstart Last Rotation', 'Warmstart No Rotation']):
-                    ws_data[r].append([(np.max(l) - m) / (M - m) 
-                                       for l in [DATA[idx][p][ws_list[0]][r]['cost'] for p in range(0, 1 + p_max)]])
+        mean_probs = np.mean(all_instances, axis=0)
+        std_probs = np.std(all_instances, axis=0)
+    
+        return mean_probs, std_probs, "PSC"
+    
+    def get_psc_cost(DATA_psc, idx_list, prob, M_values, m_values):
+        all_instances = []
+    
+        for i, idx in enumerate(range(*idx_list[prob])):
+            m = m_values[i]
+            M = M_values[i]
+            alpha_vals = []
+            A = A_list[idx] 
+            for p in range(0, p_max + 1):
+                cost_psc = np.max(DATA_psc[idx][p]['cost'] - np.sum(-A[:-1, :-1]) / 4)
+                alpha_vals.append((cost_psc - m) / (M - m))
+            all_instances.append(alpha_vals)
+    
+        mean_costs = np.mean(all_instances, axis=0)
+        std_costs = np.std(all_instances, axis=0)
+    
+        return mean_costs, std_costs, "PSC"
+    
+    def get_data(DATA, idx_list, prob, M_values, m_values, ws=None, version=None):
+        if version == "Probability":
+            warm_no_rot_mean, warm_no_rot_std = get_prob_data(DATA, idx_list, prob, ws=ws, rotation=None)
+            warm_first_rot_mean, warm_first_rot_std = get_prob_data(DATA, idx_list, prob, ws=ws, rotation=0)
+            warm_last_rot_mean, warm_last_rot_std = get_prob_data(DATA, idx_list, prob, ws=ws, rotation=-1)
+            return (warm_first_rot_mean, warm_last_rot_std, "Warmstart, first rotation"), (warm_last_rot_mean, warm_last_rot_std, "Warmstart, last rotation"), (warm_no_rot_mean, warm_no_rot_std, "Warmstart, no rotation")
+        elif version == "Cost":
+            warm_no_rot_mean, warm_no_rot_std = get_cost_data(DATA, idx_list, prob, M_values, m_values, ws=ws, rotation=None)
+            warm_first_rot_mean, warm_first_rot_std = get_cost_data(DATA, idx_list, prob, M_values, m_values, ws=ws, rotation=0)
+            warm_last_rot_mean, warm_last_rot_std = get_cost_data(DATA, idx_list, prob, M_values, m_values, ws=ws, rotation=-1)
+            return (warm_first_rot_mean, warm_first_rot_std, "Warmstart, first rotation"), (warm_last_rot_mean, warm_last_rot_std, "Warmstart, last rotation"), (warm_no_rot_mean, warm_no_rot_std, "Warmstart, no rotation")
+        return None
+         
+    def get_warmstart_data(ws, version, M_values, m_values):
+        return get_data(DATA, idx_list, prob, M_values, m_values, ws=ws, version=version)
+
+    idx_range = range(*idx_list[prob])
+    M_values = [M_list[idx] for idx in idx_range]
+    m_values = compute_instance_min(A_list, idx_list, prob)
+    
+    none_mean_prob, none_std_prob = get_prob_data(DATA, idx_list, prob, ws=None, rotation=0)
+    none_mean_cost, none_std_cost = get_cost_data(DATA, idx_list, prob, M_values, m_values, ws=None, rotation=0)
+    
+    # Grabbing All Data
+    no_prob = (none_mean_prob, none_std_prob, "No Warmstart")
+    no_cost = (none_mean_cost, none_std_cost, "No Warmstart")
+    psc_prob = get_psc_prob(PSC_DATA50, idx_list, prob)
+    psc_cost = get_psc_cost(PSC_DATA50, idx_list, prob, M_values, m_values)
+    GW2ProbData = get_warmstart_data("GW2", "Probability", M_values, m_values)
+    GW3ProbData = get_warmstart_data("GW3", "Probability", M_values, m_values)
+    BM2ProbData = get_warmstart_data("BM2", "Probability", M_values, m_values)
+    BM3ProbData = get_warmstart_data("BM3", "Probability", M_values, m_values)
+    GW2CostData = get_warmstart_data("GW2", "Cost", M_values, m_values)
+    GW3CostData = get_warmstart_data("GW3", "Cost", M_values, m_values)
+    BM2CostData = get_warmstart_data("BM2", "Cost", M_values, m_values)
+    BM3CostData = get_warmstart_data("BM3", "Cost", M_values, m_values)
+
+    def add(ws, data, array):
+        array[ws] = []
+        for rot in data:
+            array[ws].append(rot)
+    
+    def combine(GW2Data, GW3Data, BM2Data, BM3Data): 
+        array = {}
+        add("GW2", GW2Data, array)
+        add("GW3", GW3Data, array)
+        add("BM2", BM2Data, array)
+        add("BM3", BM3Data, array)
+        return array
+
+    probabilites = combine(GW2ProbData, GW3ProbData, BM2ProbData, BM3ProbData)
+    cost = combine(GW2CostData, GW3CostData, BM2CostData, BM3CostData)
+        
+    p = range(0, p_max + 1)
+
+    # Plotting
+    def plot_line(ax, data, dot=False, square=False):
+        lineStyle = "-"
+        marker = "o"
+        if dot:
+            lineStyle = "--"
+        if square:
+            marker = "s"
+        mean_data, std_data, label = data
+        ax.plot(p, mean_data, marker=marker, linestyle=lineStyle, label=label)
+        ax.fill_between(p,
+                        np.array(mean_data) - std * np.array(std_data),
+                        np.array(mean_data) + std * np.array(std_data),
+                        alpha=0.2)
             
-            psc_data.append([(np.max(l) - m - np.sum(-A[:-1, :-1]) / 4) / (M - m) 
-                             for l in [PSC_DATA[idx][p]['cost'] for p in range(0, 1 + p_max)]])
 
-            psc_data50.append([(np.max(l) - m - np.sum(-A[:-1, :-1]) / 4) / (M - m) 
-                               for l in [PSC_DATA50[idx][p]['cost'] for p in range(0, 1 + p_max)]])
-    
-        compute_and_plot(none_data, 'None', "", ax, label_suffix="", line_style='--')
-        marker_idx += 1  # Increment marker index
-        if ws_list[0] is not None:
-            for r, r_data in ws_data.items():
-                compute_and_plot(r_data, ws_list[0], r, ax, label_suffix=f"{r}")
-                marker_idx += 1  # Increment marker index
-    
-        compute_and_plot(psc_data, 'PSC', "", ax, label_suffix="")
-        ax.legend().remove()  # Remove legend
-    
-    # Plot the depth graphs in the first row
-    plot_depth([None, 'GW2'], axs[0, 0])
-    plot_depth([None, 'GW3'], axs[0, 1])
-    plot_depth([None, 'BM2'], axs[0, 2])
-    plot_depth([None, 'BM3'], axs[0, 3])
-    
-    # Plot the cost graphs in the second row
-    plot_cost(['GW2'], axs[1, 0])
-    plot_cost(['GW3'], axs[1, 1])
-    plot_cost(['BM2'], axs[1, 2])
-    plot_cost(['BM3'], axs[1, 3])
-    
-    # Ensure the x-axis line is visible and remove x-axis labels for the first row
-    for ax in axs.flat:
-        ax.spines['bottom'].set_visible(True)  # Ensure x-axis line is visible
-        ax.set_xticks(range(p_max + 1))  # Set x-axis ticks
-        ax.set_xticklabels(range(p_max + 1))  # Set x-axis labels
-    
-    # Set y-axis label only for the leftmost plot in each row
-    axs[0, 0].set_ylabel(r'$\mathcal{P}$', fontsize=25, labelpad=10)
-    axs[1, 0].set_ylabel(r'α', fontsize=25, labelpad=10)
-    
-    # Set labels for x-axis
-    for ax in axs[1, :]:
-        ax.set_xlabel('p', fontsize=25)
-    
-    # Set titles for the top row only
-    axs[0, 0].set_title("GW2", fontsize=20)
-    axs[0, 1].set_title("GW3", fontsize=20)
-    axs[0, 2].set_title("BM2", fontsize=20)
-    axs[0, 3].set_title("BM3", fontsize=20)
+    def plot(ax, no, psc, data):
+        plot_line(ax, no, dot=True)
+        for d in data:
+            plot_line(ax, d)
+        plot_line(ax, psc, square=True)
 
-    for ax in axs.flat:
-        ax.spines['bottom'].set_visible(True)  # Ensure x-axis line is visible
-        ax.set_xticks(range(p_max + 1))  # Set x-axis ticks
-        ax.set_xticklabels(range(p_max + 1))  # Set x-axis labels
-        ax.tick_params(axis='both', labelsize=15)  # Adjust tick label size for both axes
 
-    for ax in axs[0, :]:
-        ax.set_xticklabels([])  # Remove x-axis labels
-        ax.set_xticks([])
+    def plot_all(no_prob, no_cost, psc_prob, psc_cost, probabilities, cost):
+        plot(axs[0, 0], no_prob, psc_prob, probabilites["GW2"])
+        plot(axs[0, 1], no_prob, psc_prob, probabilites["GW3"])
+        plot(axs[0, 2], no_prob, psc_prob, probabilites["BM2"])
+        plot(axs[0, 3], no_prob, psc_prob, probabilites["BM3"])
 
-    fig.suptitle(f"{prob}", fontsize=30, y=0.97)
-    
-    if path is not None:
-        plt.savefig(path + ".pdf", dpi=600, bbox_inches='tight')
-    
-    plt.show()
+        plot(axs[1, 0], no_cost, psc_cost, cost["GW2"])
+        plot(axs[1, 1], no_cost, psc_cost, cost["GW3"])
+        plot(axs[1, 2], no_cost, psc_cost, cost["BM2"])
+        plot(axs[1, 3], no_cost, psc_cost, cost["BM3"])
 
-def get_depth_combined_gw2(prob, idx_dict, PSC_DATA, DATA, PSC_DATA50, M_list, A_list, path=None, p_max=5, std=.25):
-    fig, axs = plt.subplots(2, 1, figsize=(18, 16), sharex=True)  # Create 2 subplots for depth and cost
-
-    plt.subplots_adjust(wspace=0, hspace=0.1, bottom = .5)  # Adjust spacing between plots
-    markers = ['o', 'o', 'o', 'o', 's']  # Define a list of markers
-    fig.suptitle(prob, fontsize=50, y=0.94)  # Set the title with the name of `prob`
-
-    def plot_depth(ws_list, ax):
-        ax.tick_params(axis='y', which='both', length=5, width=1)
-        ax.minorticks_off()
-        marker_idx = 0  # Initialize marker index
-
-        for ws in ws_list:
-            if ws is None:
-                data = []
-                for idx in range(*idx_dict[prob]):
-                    M = M_list[idx]
-                    A = A_list[idx]
-                    data.append([abs(np.max(l))
-                                 for l in [DATA[idx][p][ws]['probs'] for p in range(0, 1 + p_max)]])
-                mean_data = np.mean(data, axis=0)
-                std_dev_data = np.std(data, axis=0)
-                line, = ax.plot(range(0, p_max + 1), mean_data, marker=markers[marker_idx % len(markers)], linestyle='--', label="None")
-                ax.fill_between(range(0, p_max + 1), 
-                                (mean_data - std * std_dev_data), 
-                                (mean_data + std * std_dev_data), 
-                                alpha=0.2, color=line.get_color())
-                marker_idx += 1  # Increment marker index
-            else:
-                for r, label in zip([0, -1, None], ['Warmstart First Rotation', 'Warmstart Last Rotation', 'Warmstart No Rotation']):
-                    data = []
-                    for idx in range(*idx_dict[prob]):
-                        M = M_list[idx]
-                        A = A_list[idx]
-                        data.append([abs(np.max(l))
-                                     for l in [DATA[idx][p][ws][r]['probs'] for p in range(0, 1 + p_max)]])
-                    mean_data = np.mean(data, axis=0)
-                    std_dev_data = np.std(data, axis=0)
-                    line, = ax.plot(range(0, p_max + 1), mean_data, marker=markers[marker_idx % len(markers)], label=label)
-                    ax.fill_between(range(0, p_max + 1), 
-                                    (mean_data - std * std_dev_data), 
-                                    (mean_data + std * std_dev_data), 
-                                    alpha=0.2, color=line.get_color())
-                    marker_idx += 1  # Increment marker index
+        for row in range(2):
+            for col in range(4):
+                ax = axs[row, col]
+                ax.yaxis.set_major_locator(MaxNLocator(nbins=5, prune='both'))
+                ax.yaxis.set_minor_locator(MaxNLocator(nbins=25, prune='both'))
+                ax.minorticks_on()
         
-        # PSC
-        data = []
-        for idx in range(*idx_dict[prob]):
-            M = M_list[idx]
+                ax.yaxis.set_major_formatter(FormatStrFormatter('%.3f'))
+
+        if path is not None:
+            plt.savefig(path + ".pdf", dpi=600, bbox_inches='tight')
+
+    plot_all(no_prob, no_cost, psc_prob, psc_cost, probabilites, cost)
+
+def get_depth_combined_gw2(prob, DATA, PSC_DATA50, M_list, A_list, idx_list, p_max = 5, std=0.25, problemLength=10, axs=None, path=None):
+    # Sizes
+    title_size = 60
+    title_y_spacing = 0.95
+    title_x_spacing = 0.48
+    y_axis_title_size = 50
+    x_axis_title_size = 35
+    x_ticker_size = 35
+    y_ticker_size = 30
+    axs_title_size = 25
+    
+
+    # Initializing Figures
+    if axs is None:
+        fig, axs = plt.subplots(2, 1, figsize=(20, 15), sharey='row')
+        fig.suptitle(prob, fontsize=title_size, y=title_y_spacing, x=title_x_spacing)
+    
+    axs[0].set_ylabel(r'$\mathcal{P}$', fontsize=y_axis_title_size, labelpad=10)
+    axs[1].set_ylabel(r'α', fontsize=y_axis_title_size, labelpad=10)
+    axs[1].set_xlabel('p', fontsize=x_axis_title_size)
+
+    for ax in axs:
+        ax.tick_params(axis='x', labelsize=x_ticker_size)
+        ax.tick_params(axis='y', labelsize=y_ticker_size)
+        ax.grid(True, which='major', axis='y', linestyle='--', alpha=0.5)
+
+    axs[0].set_xticklabels([])
+    axs[0].set_xticks([])
+
+    plt.subplots_adjust(wspace=0, hspace=0.15)
+
+    # Gathering Probabilty Data
+    def get_prob_data(data, idx_list, prob_name, ws=None, p_max=5, rotation=None):
+        mean_probs = []
+        std_probs = []
+    
+        for p in range(0, 1 + p_max):
+            vals_per_idx = []
+            for idx in range(*idx_list[prob_name]):
+                prob = data[idx][p][ws][rotation]['probs'] if ws is not None else data[idx][p][None]['probs']
+                vals_per_idx.append(np.max(prob)) 
+            mean_probs.append(np.mean(vals_per_idx))
+            std_probs.append(np.std(vals_per_idx))
+    
+        return mean_probs, std_probs
+    
+    def compute_instance_min(A_list, idx_list, prob_name):
+        m_values = []
+        for idx in range(*idx_list[prob_name]):
             A = A_list[idx]
-            data.append([abs(np.max(l))  
-                         for l in [PSC_DATA[idx][p]['probs'] for p in range(0, 1 + p_max)]])
-        mean_data = np.mean(data, axis=0)
-        std_dev_data = np.std(data, axis=0)
-        line, = ax.plot(range(0, p_max + 1), mean_data, marker=markers[marker_idx % len(markers)], label='QUBO Relaxed (10 Initializations)')
-        ax.fill_between(range(0, p_max + 1), 
-                        (mean_data - std * std_dev_data), 
-                        (mean_data + std * std_dev_data), 
-                        alpha=0.2, color=line.get_color())
+            m_values.append(-brute_force_maxcut(-A)[-1])
+        return m_values
+
+    def get_cost_data(data, idx_list, prob_name, M_values, m_values, ws=None, p_max=5, rotation=None):
+        all_instances = []
+
+        for i, idx in enumerate(range(*idx_list[prob_name])):
+            m = m_values[i]
+            M = M_values[i]
+            alpha_vals = []   
+            for p in range(0, p_max + 1):
+
+                if ws is not None:
+                    cost_ws = np.max(data[idx][p][ws][rotation]['cost'])
+                else:
+                    cost_ws = np.max(data[idx][p][None]['cost'])
+    
+                alpha = (cost_ws - m) / (M - m)
+                alpha_vals.append(alpha)
+
+            all_instances.append(alpha_vals)
+    
+        mean_cost = np.mean(all_instances, axis=0)
+        std_cost = np.std(all_instances, axis=0)
         
-        # PSC_50
-        data_50 = []
-        for idx in range(*idx_dict[prob]):
-            M = M_list[idx]
-            A = A_list[idx]
-            data_50.append([abs(np.max(l))  
-                            for l in [PSC_DATA50[idx][p]['probs'] for p in range(0, 1 + p_max)]])
-        mean_data_50 = np.mean(data_50, axis=0)
-        std_dev_data_50 = np.std(data_50, axis=0)
-        line, = ax.plot(range(0, p_max + 1), mean_data_50, marker=markers[marker_idx % len(markers)], label='QUBO Relaxed (50 Initializations)', color='goldenrod')
-        ax.fill_between(range(0, p_max + 1), 
-                        (mean_data_50 - std * std_dev_data_50), 
-                        (mean_data_50 + std * std_dev_data_50),
-                        color=line.get_color(), alpha=0.2)
+        return mean_cost, std_cost
         
-    def plot_cost(ws_list, ax):
-        def compute_and_plot(data, label_suffix, ax, line_style='-', fill_color=None, color=None):
-            mean_data = np.mean(data, axis=0)
-            std_dev_data = np.std(data, axis=0)
-            line, = ax.plot(range(0, p_max + 1), mean_data, marker=markers[marker_idx % len(markers)], label=label_suffix, linestyle=line_style, color=color)
-            ax.fill_between(range(0, p_max + 1), 
-                            mean_data - std * std_dev_data, 
-                            mean_data + std * std_dev_data, 
-                            alpha=0.2, color=line.get_color())
+    def get_psc_prob(DATA_psc, idx_list, prob):
+        all_instances = []
     
-        ws_data = {0: [], -1: [], None: []}
-        psc_data = []
-        psc_data50 = []
-        none_data = []
-        marker_idx = 0  # Initialize marker index
+        for idx in range(*idx_list[prob]):
+            prob_vals = []
+            for p in range(0, p_max + 1):
+                prob_p = np.max(DATA_psc[idx][p]['probs'])
+                prob_vals.append(prob_p)
+            all_instances.append(prob_vals)
     
-        for idx in range(*idx_dict[prob]):
-            M = M_list[idx]
-            A = A_list[idx]
-            m = -brute_force_maxcut(-A)[-1]
+        mean_probs = np.mean(all_instances, axis=0)
+        std_probs = np.std(all_instances, axis=0)
     
-            none_data.append([(np.max(l) - m) / (M - m) 
-                              for l in [DATA[idx][p][None]['cost'] for p in range(0, 1 + p_max)]])
+        return mean_probs, std_probs, "PSC"
     
-            if ws_list[0] is not None:
-                for r in ws_data.keys():
-                    ws_data[r].append([(np.max(l) - m) / (M - m) 
-                                       for l in [DATA[idx][p][ws_list[0]][r]['cost'] for p in range(0, 1 + p_max)]])
+    def get_psc_cost(DATA_psc, idx_list, prob, M_values, m_values):
+        all_instances = []
+    
+        for i, idx in enumerate(range(*idx_list[prob])):
+            m = m_values[i]
+            M = M_values[i]
+            alpha_vals = []
+            A = A_list[idx] 
+            for p in range(0, p_max + 1):
+                cost_psc = np.max(DATA_psc[idx][p]['cost'] - np.sum(-A[:-1, :-1]) / 4)
+                alpha_vals.append((cost_psc - m) / (M - m))
+            all_instances.append(alpha_vals)
+    
+        mean_costs = np.mean(all_instances, axis=0)
+        std_costs = np.std(all_instances, axis=0)
+    
+        return mean_costs, std_costs, "PSC"
+    
+    def get_data(DATA, idx_list, prob, M_values, m_values, ws=None, version=None):
+        if version == "Probability":
+            warm_no_rot_mean, warm_no_rot_std = get_prob_data(DATA, idx_list, prob, ws=ws, rotation=None)
+            warm_first_rot_mean, warm_first_rot_std = get_prob_data(DATA, idx_list, prob, ws=ws, rotation=0)
+            warm_last_rot_mean, warm_last_rot_std = get_prob_data(DATA, idx_list, prob, ws=ws, rotation=-1)
+            return (warm_first_rot_mean, warm_last_rot_std, "Warmstart, first rotation"), (warm_last_rot_mean, warm_last_rot_std, "Warmstart, last rotation"), (warm_no_rot_mean, warm_no_rot_std, "Warmstart, no rotation")
+        elif version == "Cost":
+            warm_no_rot_mean, warm_no_rot_std = get_cost_data(DATA, idx_list, prob, M_values, m_values, ws=ws, rotation=None)
+            warm_first_rot_mean, warm_first_rot_std = get_cost_data(DATA, idx_list, prob, M_values, m_values, ws=ws, rotation=0)
+            warm_last_rot_mean, warm_last_rot_std = get_cost_data(DATA, idx_list, prob, M_values, m_values, ws=ws, rotation=-1)
+            return (warm_first_rot_mean, warm_first_rot_std, "Warmstart, first rotation"), (warm_last_rot_mean, warm_last_rot_std, "Warmstart, last rotation"), (warm_no_rot_mean, warm_no_rot_std, "Warmstart, no rotation")
+        return None
+         
+    def get_warmstart_data(ws, version, M_values, m_values):
+        return get_data(DATA, idx_list, prob, M_values, m_values, ws=ws, version=version)
+
+    idx_range = range(*idx_list[prob])
+    M_values = [M_list[idx] for idx in idx_range]
+    m_values = compute_instance_min(A_list, idx_list, prob)
+    
+    none_mean_prob, none_std_prob = get_prob_data(DATA, idx_list, prob, ws=None, rotation=0)
+    none_mean_cost, none_std_cost = get_cost_data(DATA, idx_list, prob, M_values, m_values, ws=None, rotation=0)
+    
+    # Grabbing All Data
+    no_prob = (none_mean_prob, none_std_prob, "No Warmstart")
+    no_cost = (none_mean_cost, none_std_cost, "No Warmstart")
+    psc_prob = get_psc_prob(PSC_DATA50, idx_list, prob)
+    psc_cost = get_psc_cost(PSC_DATA50, idx_list, prob, M_values, m_values)
+    GW2ProbData = get_warmstart_data("GW2", "Probability", M_values, m_values)
+    GW2CostData = get_warmstart_data("GW2", "Cost", M_values, m_values)
+
+    def add(ws, data, array):
+        array[ws] = []
+        for rot in data:
+            array[ws].append(rot)
+    
+    def combine(GW2Data): 
+        array = {}
+        add("GW2", GW2Data, array)
+        return array
+
+    probabilites = combine(GW2ProbData)
+    cost = combine(GW2CostData)
+        
+    p = range(0, p_max + 1)
+
+    # Plotting
+    def plot_line(ax, data, dot=False, square=False):
+        lineStyle = "-"
+        marker = "o"
+        if dot:
+            lineStyle = "--"
+        if square:
+            marker = "s"
+        mean_data, std_data, label = data
+        ax.plot(p, mean_data, marker=marker, linestyle=lineStyle, label=label)
+        ax.fill_between(p,
+                        np.array(mean_data) - std * np.array(std_data),
+                        np.array(mean_data) + std * np.array(std_data),
+                        alpha=0.2)
             
-            psc_data.append([(np.max(l) - m - np.sum(-A[:-1, :-1]) / 4) / (M - m) 
-                             for l in [PSC_DATA[idx][p]['cost'] for p in range(0, 1 + p_max)]])
 
-            psc_data50.append([(np.max(l) - m - np.sum(-A[:-1, :-1]) / 4) / (M - m) 
-                               for l in [PSC_DATA50[idx][p]['cost'] for p in range(0, 1 + p_max)]])
-    
-        compute_and_plot(none_data, 'None', axs[1], line_style='--')
-        marker_idx += 1  # Increment marker index
+    def plot(ax, no, psc, data):
+        plot_line(ax, no, dot=True)
+        for d in data:
+            plot_line(ax, d)
+        plot_line(ax, psc, square=True)
+
+
+    def plot_all(no_prob, no_cost, psc_prob, psc_cost, probabilities, cost):
+        plot(axs[0], no_prob, psc_prob, probabilites["GW2"])
+        plot(axs[1], no_cost, psc_cost, cost["GW2"])
+
+        for row in range(2):
+                ax = axs[row]
+                ax.yaxis.set_major_locator(MaxNLocator(nbins=5, prune='both'))
+                ax.yaxis.set_minor_locator(MaxNLocator(nbins=25, prune='both'))
+                ax.minorticks_on()
         
-        if ws_list[0] is not None:
-            for r in ws_data.keys():
-                compute_and_plot(ws_data[r], f'GW2 {r}', axs[1])  # Cost plot for GW2
-                marker_idx += 1  # Increment marker index
+                ax.yaxis.set_major_formatter(FormatStrFormatter('%.3f'))
+
+        if path is not None:
+            plt.savefig(path + ".pdf", dpi=600, bbox_inches='tight')
+
+    plot_all(no_prob, no_cost, psc_prob, psc_cost, probabilites, cost)
+
+def get_depth_combined_gw3(prob, DATA, PSC_DATA50, M_list, A_list, idx_list, p_max = 5, std=0.25, problemLength=10, axs=None, path=None):
+    # Sizes
+    title_size = 60
+    title_y_spacing = 0.95
+    title_x_spacing = 0.48
+    y_axis_title_size = 50
+    x_axis_title_size = 35
+    x_ticker_size = 35
+    y_ticker_size = 30
+    axs_title_size = 25
     
-        compute_and_plot(psc_data, 'Qubo Relaxed (10 Initializations)', axs[1])
-        compute_and_plot(psc_data50, 'Qubo Relaxed (50 Initializations)', axs[1], color='goldenrod')
+
+    # Initializing Figures
+    if axs is None:
+        fig, axs = plt.subplots(2, 1, figsize=(20, 15), sharey='row')
+        fig.suptitle(prob, fontsize=title_size, y=title_y_spacing, x=title_x_spacing)
     
-    # Plot the depth and cost graphs for 'GW2'
-    plot_depth([None, 'GW2'], axs[0])  # Depth plot for GW2
-    plot_cost(['GW2'], axs[1])  # Cost plot for GW2
+    axs[0].set_ylabel(r'$\mathcal{P}$', fontsize=y_axis_title_size, labelpad=10)
+    axs[1].set_ylabel(r'α', fontsize=y_axis_title_size, labelpad=10)
+    axs[1].set_xlabel('p', fontsize=x_axis_title_size)
+
+    for ax in axs:
+        ax.tick_params(axis='x', labelsize=x_ticker_size)
+        ax.tick_params(axis='y', labelsize=y_ticker_size)
+        ax.grid(True, which='major', axis='y', linestyle='--', alpha=0.5)
+
+    axs[0].set_xticklabels([])
+    axs[0].set_xticks([])
+
+    plt.subplots_adjust(wspace=0, hspace=0.15)
+
+    # Gathering Probabilty Data
+    def get_prob_data(data, idx_list, prob_name, ws=None, p_max=5, rotation=None):
+        mean_probs = []
+        std_probs = []
     
-    # Ensure the x-axis line is visible and adjust x-axis ticks
-    for ax in axs.flat:
-        ax.spines['bottom'].set_visible(True)  # Ensure x-axis line is visible
-        ax.set_xticks(range(p_max + 1))  # Set x-axis ticks
-        ax.set_xticklabels(range(p_max + 1))  # Set x-axis labels
+        for p in range(0, 1 + p_max):
+            vals_per_idx = []
+            for idx in range(*idx_list[prob_name]):
+                prob = data[idx][p][ws][rotation]['probs'] if ws is not None else data[idx][p][None]['probs']
+                vals_per_idx.append(np.max(prob)) 
+            mean_probs.append(np.mean(vals_per_idx))
+            std_probs.append(np.std(vals_per_idx))
     
-    # Set y-axis label only for the leftmost plot in each row
-    axs[0].set_ylabel(r'$\mathcal{P}$', fontsize=35, labelpad=10)
-    axs[1].set_ylabel(r'$\alpha$', fontsize=35, labelpad=10)  # Change 'a' to Greek alpha (α) in the y-axis label
+        return mean_probs, std_probs
     
-    # Set labels for x-axis
-    axs[1].set_xlabel('p', fontsize=35)
-
-    # # Add combined legend below both subplots
-    handles, labels = axs[0].get_legend_handles_labels()
-    # fig.legend(handles, labels, loc='lower center', ncol=6, bbox_to_anchor=(0.5, .07), fontsize=12, frameon=True)
-
-    # Adjust spacing to prevent overlap with the legend
-    plt.subplots_adjust(bottom=0.2)
-
-    for ax in axs.flat:
-        ax.tick_params(axis='both', labelsize=15)  # Adjust tick label size for both axes
-
-    if path is not None:
-        plt.savefig(path + ".pdf", dpi=600, bbox_inches='tight')
-
-    plt.show()
-
-def get_depth_combined_gw2_PO(prob, idx_dict, PSC_DATA, DATA, PSC_DATA50, M_list, A_list, path=None, p_max=5, std=.25):
-    fig, axs = plt.subplots(2, 1, figsize=(18, 16), sharex=True)  # Create 2 subplots for depth and cost
-
-    plt.subplots_adjust(wspace=0, hspace=0.1, bottom = .5)  # Adjust spacing between plots
-    markers = ['o', 'o', 'o', 'o', 's']  # Define a list of markers
-    fig.suptitle(prob, fontsize=50, y=0.94)  # Set the title with the name of `prob`
-
-    def plot_depth(ws_list, ax):
-        ax.tick_params(axis='y', which='both', length=5, width=1)
-        ax.minorticks_off()
-        marker_idx = 0  # Initialize marker index
-
-        for ws in ws_list:
-            if ws is None:
-                data = []
-                for idx in range(*idx_dict[prob]):
-                    M = M_list[idx]
-                    A = A_list[idx]
-                    data.append([abs(np.max(l))
-                                 for l in [DATA[idx][p][ws]['probs'] for p in range(0, 1 + p_max)]])
-                mean_data = np.mean(data, axis=0)
-                std_dev_data = np.std(data, axis=0)
-                line, = ax.plot(range(0, p_max + 1), mean_data, marker=markers[marker_idx % len(markers)], linestyle='--', label="None")
-                ax.fill_between(range(0, p_max + 1), 
-                                (mean_data - std * std_dev_data), 
-                                (mean_data + std * std_dev_data), 
-                                alpha=0.2, color=line.get_color())
-                marker_idx += 1  # Increment marker index
-            else:
-                for r, label in zip([0, -1, None], ['Warmstart First Rotation', 'Warmstart Last Rotation', 'Warmstart No Rotation']):
-                    data = []
-                    for idx in range(*idx_dict[prob]):
-                        M = M_list[idx]
-                        A = A_list[idx]
-                        data.append([abs(np.max(l))
-                                     for l in [DATA[idx][p][ws][r]['probs'] for p in range(0, 1 + p_max)]])
-                    mean_data = np.mean(data, axis=0)
-                    std_dev_data = np.std(data, axis=0)
-                    line, = ax.plot(range(0, p_max + 1), mean_data, marker=markers[marker_idx % len(markers)], label=label)
-                    ax.fill_between(range(0, p_max + 1), 
-                                    (mean_data - std * std_dev_data), 
-                                    (mean_data + std * std_dev_data), 
-                                    alpha=0.2, color=line.get_color())
-                    marker_idx += 1  # Increment marker index
-        
-        # PSC
-        data = []
-        for idx in range(*idx_dict[prob]):
-            M = M_list[idx]
+    def compute_instance_min(A_list, idx_list, prob_name):
+        m_values = []
+        for idx in range(*idx_list[prob_name]):
             A = A_list[idx]
-            data.append([abs(np.max(l))  
-                         for l in [PSC_DATA[idx][p]['probs'] for p in range(0, 1 + p_max)]])
-        mean_data = np.mean(data, axis=0)
-        std_dev_data = np.std(data, axis=0)
-        line, = ax.plot(range(0, p_max + 1), mean_data, marker=markers[marker_idx % len(markers)], label='QUBO Relaxed (10 Initializations)')
-        ax.fill_between(range(0, p_max + 1), 
-                        (mean_data - std * std_dev_data), 
-                        (mean_data + std * std_dev_data), 
-                        alpha=0.2, color=line.get_color())
+            m_values.append(-brute_force_maxcut(-A)[-1])
+        return m_values
+
+    def get_cost_data(data, idx_list, prob_name, M_values, m_values, ws=None, p_max=5, rotation=None):
+        all_instances = []
+
+        for i, idx in enumerate(range(*idx_list[prob_name])):
+            m = m_values[i]
+            M = M_values[i]
+            alpha_vals = []   
+            for p in range(0, p_max + 1):
+
+                if ws is not None:
+                    cost_ws = np.max(data[idx][p][ws][rotation]['cost'])
+                else:
+                    cost_ws = np.max(data[idx][p][None]['cost'])
+    
+                alpha = (cost_ws - m) / (M - m)
+                alpha_vals.append(alpha)
+
+            all_instances.append(alpha_vals)
+    
+        mean_cost = np.mean(all_instances, axis=0)
+        std_cost = np.std(all_instances, axis=0)
         
-        # PSC_50
+        return mean_cost, std_cost
         
-    def plot_cost(ws_list, ax):
-        def compute_and_plot(data, label_suffix, ax, line_style='-', fill_color=None, color=None):
-            mean_data = np.mean(data, axis=0)
-            std_dev_data = np.std(data, axis=0)
-            line, = ax.plot(range(0, p_max + 1), mean_data, marker=markers[marker_idx % len(markers)], label=label_suffix, linestyle=line_style, color=color)
-            ax.fill_between(range(0, p_max + 1), 
-                            mean_data - std * std_dev_data, 
-                            mean_data + std * std_dev_data, 
-                            alpha=0.2, color=line.get_color())
+    def get_psc_prob(DATA_psc, idx_list, prob):
+        all_instances = []
     
-        ws_data = {0: [], -1: [], None: []}
-        psc_data = []
-        psc_data50 = []
-        none_data = []
-        marker_idx = 0  # Initialize marker index
+        for idx in range(*idx_list[prob]):
+            prob_vals = []
+            for p in range(0, p_max + 1):
+                prob_p = np.max(DATA_psc[idx][p]['probs'])
+                prob_vals.append(prob_p)
+            all_instances.append(prob_vals)
     
-        for idx in range(*idx_dict[prob]):
-            M = M_list[idx]
-            A = A_list[idx]
-            m = -brute_force_maxcut(-A)[-1]
+        mean_probs = np.mean(all_instances, axis=0)
+        std_probs = np.std(all_instances, axis=0)
     
-            none_data.append([(np.max(l) - m) / (M - m) 
-                              for l in [DATA[idx][p][None]['cost'] for p in range(0, 1 + p_max)]])
+        return mean_probs, std_probs, "PSC"
     
-            if ws_list[0] is not None:
-                for r in ws_data.keys():
-                    ws_data[r].append([(np.max(l) - m) / (M - m) 
-                                       for l in [DATA[idx][p][ws_list[0]][r]['cost'] for p in range(0, 1 + p_max)]])
+    def get_psc_cost(DATA_psc, idx_list, prob, M_values, m_values):
+        all_instances = []
+    
+        for i, idx in enumerate(range(*idx_list[prob])):
+            m = m_values[i]
+            M = M_values[i]
+            alpha_vals = []
+            A = A_list[idx] 
+            for p in range(0, p_max + 1):
+                cost_psc = np.max(DATA_psc[idx][p]['cost'] - np.sum(-A[:-1, :-1]) / 4)
+                alpha_vals.append((cost_psc - m) / (M - m))
+            all_instances.append(alpha_vals)
+    
+        mean_costs = np.mean(all_instances, axis=0)
+        std_costs = np.std(all_instances, axis=0)
+    
+        return mean_costs, std_costs, "PSC"
+    
+    def get_data(DATA, idx_list, prob, M_values, m_values, ws=None, version=None):
+        if version == "Probability":
+            warm_no_rot_mean, warm_no_rot_std = get_prob_data(DATA, idx_list, prob, ws=ws, rotation=None)
+            warm_first_rot_mean, warm_first_rot_std = get_prob_data(DATA, idx_list, prob, ws=ws, rotation=0)
+            warm_last_rot_mean, warm_last_rot_std = get_prob_data(DATA, idx_list, prob, ws=ws, rotation=-1)
+            return (warm_first_rot_mean, warm_last_rot_std, "Warmstart, first rotation"), (warm_last_rot_mean, warm_last_rot_std, "Warmstart, last rotation"), (warm_no_rot_mean, warm_no_rot_std, "Warmstart, no rotation")
+        elif version == "Cost":
+            warm_no_rot_mean, warm_no_rot_std = get_cost_data(DATA, idx_list, prob, M_values, m_values, ws=ws, rotation=None)
+            warm_first_rot_mean, warm_first_rot_std = get_cost_data(DATA, idx_list, prob, M_values, m_values, ws=ws, rotation=0)
+            warm_last_rot_mean, warm_last_rot_std = get_cost_data(DATA, idx_list, prob, M_values, m_values, ws=ws, rotation=-1)
+            return (warm_first_rot_mean, warm_first_rot_std, "Warmstart, first rotation"), (warm_last_rot_mean, warm_last_rot_std, "Warmstart, last rotation"), (warm_no_rot_mean, warm_no_rot_std, "Warmstart, no rotation")
+        return None
+         
+    def get_warmstart_data(ws, version, M_values, m_values):
+        return get_data(DATA, idx_list, prob, M_values, m_values, ws=ws, version=version)
+
+    idx_range = range(*idx_list[prob])
+    M_values = [M_list[idx] for idx in idx_range]
+    m_values = compute_instance_min(A_list, idx_list, prob)
+    
+    none_mean_prob, none_std_prob = get_prob_data(DATA, idx_list, prob, ws=None, rotation=0)
+    none_mean_cost, none_std_cost = get_cost_data(DATA, idx_list, prob, M_values, m_values, ws=None, rotation=0)
+    
+    # Grabbing All Data
+    no_prob = (none_mean_prob, none_std_prob, "No Warmstart")
+    no_cost = (none_mean_cost, none_std_cost, "No Warmstart")
+    psc_prob = get_psc_prob(PSC_DATA50, idx_list, prob)
+    psc_cost = get_psc_cost(PSC_DATA50, idx_list, prob, M_values, m_values)
+    GW3ProbData = get_warmstart_data("GW3", "Probability", M_values, m_values)
+    GW3CostData = get_warmstart_data("GW3", "Cost", M_values, m_values)
+
+    def add(ws, data, array):
+        array[ws] = []
+        for rot in data:
+            array[ws].append(rot)
+    
+    def combine(GW3Data): 
+        array = {}
+        add("GW3", GW3Data, array)
+        return array
+
+    probabilites = combine(GW3ProbData)
+    cost = combine(GW3CostData)
+        
+    p = range(0, p_max + 1)
+
+    # Plotting
+    def plot_line(ax, data, dot=False, square=False):
+        lineStyle = "-"
+        marker = "o"
+        if dot:
+            lineStyle = "--"
+        if square:
+            marker = "s"
+        mean_data, std_data, label = data
+        ax.plot(p, mean_data, marker=marker, linestyle=lineStyle, label=label)
+        ax.fill_between(p,
+                        np.array(mean_data) - std * np.array(std_data),
+                        np.array(mean_data) + std * np.array(std_data),
+                        alpha=0.2)
             
-            psc_data.append([(np.max(l) - m - np.sum(-A[:-1, :-1]) / 4) / (M - m) 
-                             for l in [PSC_DATA[idx][p]['cost'] for p in range(0, 1 + p_max)]])
 
-            psc_data50.append([(np.max(l) - m - np.sum(-A[:-1, :-1]) / 4) / (M - m) 
-                               for l in [PSC_DATA50[idx][p]['cost'] for p in range(0, 1 + p_max)]])
-    
-        compute_and_plot(none_data, 'None', axs[1], line_style='--')
-        marker_idx += 1  # Increment marker index
+    def plot(ax, no, psc, data):
+        plot_line(ax, no, dot=True)
+        for d in data:
+            plot_line(ax, d)
+        plot_line(ax, psc, square=True)
+
+
+    def plot_all(no_prob, no_cost, psc_prob, psc_cost, probabilities, cost):
+        plot(axs[0], no_prob, psc_prob, probabilites["GW3"])
+        plot(axs[1], no_cost, psc_cost, cost["GW3"])
+
+        for row in range(2):
+                ax = axs[row]
+                ax.yaxis.set_major_locator(MaxNLocator(nbins=5, prune='both'))
+                ax.yaxis.set_minor_locator(MaxNLocator(nbins=25, prune='both'))
+                ax.minorticks_on()
         
-        if ws_list[0] is not None:
-            for r in ws_data.keys():
-                compute_and_plot(ws_data[r], f'GW2 {r}', axs[1])  # Cost plot for GW2
-                marker_idx += 1  # Increment marker index
-    
-        compute_and_plot(psc_data, 'Qubo Relaxed (10 Initializations)', axs[1])
-    
-    # Plot the depth and cost graphs for 'GW2'
-    plot_depth([None, 'GW2'], axs[0])  # Depth plot for GW2
-    plot_cost(['GW2'], axs[1])  # Cost plot for GW2
-    
-    # Ensure the x-axis line is visible and adjust x-axis ticks
-    for ax in axs.flat:
-        ax.spines['bottom'].set_visible(True)  # Ensure x-axis line is visible
-        ax.set_xticks(range(p_max + 1))  # Set x-axis ticks
-        ax.set_xticklabels(range(p_max + 1))  # Set x-axis labels
-    
-    # Set y-axis label only for the leftmost plot in each row
-    axs[0].set_ylabel(r'$\mathcal{P}$', fontsize=35, labelpad=10)
-    axs[1].set_ylabel(r'$\alpha$', fontsize=35, labelpad=10)  # Change 'a' to Greek alpha (α) in the y-axis label
-    
-    # Set labels for x-axis
-    axs[1].set_xlabel('p', fontsize=35)
+                ax.yaxis.set_major_formatter(FormatStrFormatter('%.3f'))
 
-    # # Add combined legend below both subplots
-    handles, labels = axs[0].get_legend_handles_labels()
-    # fig.legend(handles, labels, loc='lower center', ncol=6, bbox_to_anchor=(0.5, .07), fontsize=12, frameon=True)
+        if path is not None:
+            plt.savefig(path + ".pdf", dpi=600, bbox_inches='tight')
 
-    # Adjust spacing to prevent overlap with the legend
-    plt.subplots_adjust(bottom=0.2)
-
-    for ax in axs.flat:
-        ax.tick_params(axis='both', labelsize=15)  # Adjust tick label size for both axes
-
-    if path is not None:
-        plt.savefig(path + ".pdf", dpi=600, bbox_inches='tight')
-
-    plt.show()
-
-
-
-
+    plot_all(no_prob, no_cost, psc_prob, psc_cost, probabilites, cost)
 
 def plot_distance(prob, DATA1, DATA2, prob1="10 Initializations", prob2="50 Initializations", path=None):
     fig, ax = plt.subplots(figsize=(10, 6))
@@ -1446,7 +1456,6 @@ def calculate_depth_points_gw3(prob, idx_dict, PSC_DATA, DATA, PSC_DATA50, M_lis
 
     return formatted_results
 
-
 def calculate_depth_points_gw2(prob, idx_dict, PSC_DATA, DATA, PSC_DATA50, M_list, A_list, p_max=5, custom_std_scale=0.25):
     ws_list = ['BM2', 'BM3', 'GW2', 'GW3', None]
     results = {
@@ -1505,16 +1514,12 @@ def calculate_depth_points_gw2(prob, idx_dict, PSC_DATA, DATA, PSC_DATA50, M_lis
 
     return formatted_results
 
-
 def format_dictionary(data):
     formatted_output = ""
     for key, values in data.items():
-        # Add the main type with a line break
         formatted_output += f"{key}:\n"
         for section, section_values in values.items():
-            # Add the section name and its values with a line break
             formatted_output += f"  {section}: {section_values}\n"
-        # Add an extra line break after each type
         formatted_output += "\n"
     return formatted_output
 
@@ -1581,4 +1586,131 @@ def plot_numbers(prob, dict):
             print(f"{idx}. {warmstart}: {within_std_list}")
 
     warmstarts_std(dict)
- 
+
+def ensure_dir_exists(file_path):
+    """Ensure that the directory for a given file path exists."""
+    directory = os.path.dirname(file_path)
+    if directory and not os.path.exists(directory):
+        os.makedirs(directory)
+
+def delete_files(files):
+    for file in files:
+        if os.path.exists(file):
+            os.remove(file)
+        
+def combine_plots_vertical(pdf_files, output_file, overlap=5):
+    ensure_dir_exists(output_file)
+    """
+    Combine PDFs vertically into one PDF, centering each page horizontally,
+    with optional overlap between pages.
+    """
+    doc = fitz.open()
+
+    total_width = 0
+    total_height = 0
+    pages = []
+
+    for pdf in pdf_files:
+        src = fitz.open(pdf)
+        for page in src:
+            rect = page.rect
+            pages.append((pdf, page.number, rect))
+            total_width = max(total_width, rect.width)
+            total_height += rect.height - overlap
+        src.close()
+
+    total_height += overlap
+
+    new_page = doc.new_page(width=total_width, height=total_height)
+
+    y_offset = 0
+    for pdf, page_num, rect in pages:
+        src = fitz.open(pdf)
+        x_offset = (total_width - rect.width) / 2
+        target = fitz.Rect(x_offset, y_offset, x_offset + rect.width, y_offset + rect.height)
+        new_page.show_pdf_page(target, src, page_num)
+        y_offset += rect.height - overlap
+        src.close()
+
+    doc.save(output_file)
+
+def combine_plots_grid(pdf_files, output_file, per_row=2, padding=10, side_padding=20):
+    """
+    Combine PDFs in a grid layout.
+
+    Parameters:
+        pdf_files (list): list of PDF paths
+        output_file (str): output PDF path
+        per_row (int): number of plots per row
+        padding (float): spacing between plots
+        side_padding (float): extra space on the right side
+    """
+    ensure_dir_exists(output_file)
+    doc = fitz.open()
+
+    page_sizes = []
+    pages = []
+    for pdf in pdf_files:
+        src = fitz.open(pdf)
+        for page in src:
+            pages.append((pdf, page.number, page.rect))
+            page_sizes.append(page.rect)
+        src.close()
+
+    rows = (len(pages) + per_row - 1) // per_row
+
+    max_width = max(rect.width for rect in page_sizes)
+    max_height = max(rect.height for rect in page_sizes)
+
+    new_width = per_row * max_width + (per_row - 1) * padding + side_padding
+    new_height = rows * max_height + (rows - 1) * padding
+    new_page = doc.new_page(width=new_width, height=new_height)
+
+    for idx, (pdf, page_num, rect) in enumerate(pages):
+        row = idx // per_row
+        col = idx % per_row
+
+        x_offset = col * (max_width + padding)
+        y_offset = row * (max_height + padding)
+
+        target = fitz.Rect(x_offset, y_offset,
+                           x_offset + rect.width,
+                           y_offset + rect.height)
+        src = fitz.open(pdf)
+        new_page.show_pdf_page(target, src, page_num)
+        src.close()
+
+    doc.save(output_file)
+    
+def create_legend_pdf(path=None, dpi=600):
+    ensure_dir_exists(path)
+    """
+    Creates a standalone horizontal legend PDF with a box around it,
+    larger and centered so it matches other stacked plots.
+    """
+    fig, ax = plt.subplots(figsize=(13, 3))
+    colors = list(mcolors.TABLEAU_COLORS.values())
+
+    handles = [
+        Line2D([0], [0], linestyle="--", marker="o", color=colors[0], markersize=15, linewidth=5, label="No Warmstart"),
+        Line2D([0], [0], linestyle="-", marker="o", color=colors[1], markersize=15, linewidth=5, label="Warmstart, first rotation"),
+        Line2D([0], [0], linestyle="-", marker="o", color=colors[2], markersize=15, linewidth=5, label="Warmstart, last rotation"),
+        Line2D([0], [0], linestyle="-", marker="o", color=colors[3], markersize=15, linewidth=5, label="Warmstart, no rotation"),
+        Line2D([0], [0], linestyle="-", marker="s", color=colors[4], markersize=15, linewidth=5, label="QUBO Relaxed"),
+    ]
+
+    ax.legend(handles=handles,
+              loc="center",
+              fontsize=30,
+              frameon=True,
+              borderpad=1.5,
+              labelspacing=1.2,
+              handlelength=3,
+              ncol=len(handles),
+              handletextpad=1)
+
+    ax.axis("off")
+
+    if path:
+        fig.savefig(path, format="pdf", bbox_inches="tight", dpi=dpi)
+    plt.close(fig)
