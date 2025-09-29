@@ -23,7 +23,7 @@ Discrete/Continous Random QUBO share a file and TSP/MIS share a file
 
 * **FullRun.ipynb**: Samples 10 instances from those generated in the depth0 files and compares "good" warmstarts (GW3,GW2) with rotations on first, last, and no qubits over depth 0-5. We also do PSC warmstarts with 10 and 50 initializations. The paper only incudes 50 initializations in figures, and calls PSC "Qubo-Relaxed".
 
-All data is stored via pickle on [google drive](https://drive.google.com/drive/folders/1TCz_ncc0QwwceBb3bvijLQMW0Dol0Nef?usp=sharing](https://drive.google.com/drive/folders/1VDM-w6x0rtBIg1_GsCqsOKAtylD_hWCZ?usp=sharing](https://drive.google.com/drive/folders/1VDM-w6x0rtBIg1_GsCqsOKAtylD_hWCZ?usp=sharing)
+All data is stored via pickle on [google drive](https://drive.google.com/drive/folders/1VDM-w6x0rtBIg1_GsCqsOKAtylD_hWCZ?usp=sharing)
 
 ### Figures
 All probems have 7 figures 
